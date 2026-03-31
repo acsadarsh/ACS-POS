@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+  <link rel="manifest" href="manifest.json">
+<script>
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('sw.js');
+    });
+  }
+</script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="mobile-web-app-capable" content="yes">
+    <title>ACS POS AI Final</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+    
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+
+    <style>
+        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { margin: 0; padding: 0; background-color: #2c3e50; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+        /* --- AUTH & ADMIN OVERLAY CSS --- */
+        #authOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #2c3e50; z-index: 9999; display: flex; flex-direction: column; align-items: center; justify-content: center; overflow-y: auto; padding: 20px; }
+        .auth-box { background: white; padding: 20px; border-radius: 10px; width: 100%; max-width: 400px; box-shadow: 0 4px 15px rgba(0,0,0,0.3); }
+        .auth-tabs { display: flex; margin-bottom: 20px; border-bottom: 2px solid #ecf0f1; }
+        .auth-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; font-weight: bold; color: #7f8c8d; }
+        .auth-tab.active { color: #2980b9; border-bottom: 3px solid #2980b9; }
+        .auth-form { display: none; flex-direction: column; gap: 10px; }
+        .auth-form.active { display: flex; }
+        .auth-input { padding: 10px; border: 1px solid #bdc3c7; border-radius: 5px; font-size: 14px; width: 100%; outline: none; }
+        .auth-btn { background: #2980b9; color: white; border: none; padding: 12px; border-radius: 5px; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 5px; }
+        .auth-btn-alt { background: #e74c3c; }
+        
+        #adminOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #ecf0f1; z-index: 10000; display: none; flex-direction: column; padding: 20px; overflow-y: auto; }
+        /* -------------------------------- */
+
+        /* 1. HEADER */
+        .app-header { flex: 0 0 50px; background: #1a252f; color: white; padding: 0 15px; display: flex; justify-content: space-between; align-items: center; z-index: 2000; box-shadow: 0 2px 5px rgba(0,0,0,0.3); }
+
+        /* 2. MAIN CONTAINER */
+        .main-container { flex: 1; position: relative; overflow: hidden; display: flex; flex-direction: column; padding-bottom: 90px; }
+        .view-section { display: none; flex-direction: column; height: 100%; width: 100%; }
+        .active-view { display: flex; }
+
+        /* INPUT DOCK */
+        .input-dock { flex: 0 0 auto; background: #34495e; padding: 10px; z-index: 10; box-shadow: 0 2px 5px rgba(0,0,0,0.2); }
+        .input-row { display: flex; gap: 5px; margin-bottom: 5px; position: relative; }
+        input, select { padding: 10px; border: none; border-radius: 5px; font-weight: bold; outline: none; font-size: 14px; width: 100%; }
+        
+        .btn { border: none; border-radius: 5px; cursor: pointer; color: white; display: flex; align-items: center; justify-content: center; transition: 0.3s; }
+        .btn-mic { background: #e67e22; width: 50px; font-size: 18px; }
+        .btn-scan { background: #8e44ad; width: 65px; font-size: 22px; }
+        .btn-add { background: #27ae60; flex: 1; font-weight: bold; font-size: 16px; }
+
+        @keyframes pulseMic { 0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0.7); } 50% { transform: scale(1.05); box-shadow: 0 0 15px 5px rgba(255, 0, 0, 0.7); } 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(255, 0, 0, 0); } }
+        .mic-listening { background-color: #ff0000 !important; animation: pulseMic 1s infinite; color: white !important; }
+
+        .suggest-box { position: absolute; top: 100%; left: 0; width: 100%; background: white; color: black; box-shadow: 0 4px 10px rgba(0,0,0,0.5); max-height: 180px; overflow-y: auto; z-index: 1000; border-radius: 0 0 5px 5px; display: none; }
+        .suggest-item { padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; }
+        .suggest-item:active { background: #eee; }
+
+        /* SCROLL AREA & PAPER BILL */
+        .scroll-area { flex: 1; overflow-y: auto; background: #555; padding: 15px; -webkit-overflow-scrolling: touch; padding-bottom: 20px; }
+        .paper-wrapper { display: flex; justify-content: center; padding-bottom: 20px; }
+        .paper-bill { width: 100%; max-width: 350px; background: #fff; min-height: 300px; padding: 10px; color: black; font-family: 'Courier New', monospace; font-weight: bold; font-size: 12px; position: relative; box-shadow: 0 0 15px black; margin-bottom: 20px; }
+        .r-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
+        .r-table th { border-bottom: 2px solid #000; text-align: left; font-size: 11px; }
+        .r-table td { padding: 4px 0; border-bottom: 1px dotted #aaa; }
+        [contenteditable="true"] { outline: none; }
+        [contenteditable="true"]:focus { background-color: #fdfd96; }
+
+        /* 3. FOOTER */
+        .action-bar { position: fixed; bottom: 0; left: 0; width: 100%; height: 90px; background: #fff; display: flex; justify-content: space-around; align-items: flex-start; z-index: 5000; box-shadow: 0 -2px 10px rgba(0,0,0,0.3); border-top: 1px solid #ccc; padding-top: 12px; padding-bottom: 45px; }
+        .action-btn { background: none; border: none; display: flex; flex-direction: column; align-items: center; cursor: pointer; }
+        .action-btn i { font-size: 24px; padding: 10px; border-radius: 10px; color: white; margin-bottom: 4px; }
+        .action-btn span { color: #333; font-size: 11px; font-weight: bold; }
+        .btn-gen i { background: #2980b9; } .btn-prt i { background: #7f8c8d; } .btn-shr i { background: #27ae60; } .btn-due i { background: #c0392b; }
+
+        /* LISTS */
+        .list-wrapper { padding: 10px; background: #ecf0f1; min-height: 100%; }
+        .search-box { padding: 10px; background: #34495e; position: sticky; top: 0; z-index: 5; }
+        .data-card { background: white; padding: 10px; margin-bottom: 10px; border-radius: 5px; display: flex; justify-content: space-between; align-items: center; border-left: 5px solid #27ae60; }
+        .card-due { border-left: 5px solid #c0392b; }
+        .card-btn { padding: 5px 8px; border-radius: 4px; border: none; color: white; margin-left: 5px; cursor: pointer; }
+        .btn-view { background: #2980b9; } .btn-del { background: #c0392b; } .btn-wa { background: #25D366; } .btn-edit { background: #f39c12; } .btn-play { background: #8e44ad; }
+
+        /* NOTEPAD */
+        .rich-toolbar { display:flex; gap:10px; padding:10px; background:#ecf0f1; border-bottom:1px solid #ccc; overflow-x:auto; flex-shrink:0; white-space: nowrap; }
+        .rich-toolbar button { background:white; border:1px solid #bdc3c7; border-radius:4px; padding:8px 15px; font-size:16px; color:#2c3e50; cursor:pointer; flex-shrink:0; }
+        #noteEditor { flex:1; padding:15px; overflow-y:auto; outline:none; font-size:16px; line-height:1.5; font-family: sans-serif; background:#fff; color:#000; }
+        #noteEditor[contenteditable]:empty:before { content: attr(data-placeholder); color: #aaa; font-style: italic; }
+        #noteEditor img { max-width: 100%; border-radius: 5px; margin: 10px 0; }
+
+        /* SIDEBAR & MODALS */
+        .modal-overlay { display: none; position: fixed; top: 50px; left: 0; width: 100%; height: calc(100% - 50px); background: rgba(0,0,0,0.5); z-index: 5100; }
+        .sidebar { position: fixed; top: 50px; left: -300px; width: 300px; height: calc(100% - 50px); background: #2c3e50; transition: 0.3s; z-index: 5200; padding-top: 10px; box-shadow: 2px 0 5px rgba(0,0,0,0.5); overflow-y:auto; }
+        .sidebar a { display: flex; align-items: center; padding: 18px 20px; color: white; text-decoration: none; border-bottom: 1px solid #34495e; font-size: 18px; font-weight: bold; cursor: pointer; }
+        .sidebar a i { font-size: 24px; margin-right: 15px; width: 30px; text-align: center; color: #3498db; }
+        .sidebar.active { left: 0; }
+
+        #imgPreviewModal, #scannerModal, #voiceModal, #notiModal { display:none; position:fixed; top:50px; left:0; width:100%; height:calc(100% - 50px); background:rgba(0,0,0,0.95); z-index:6000; flex-direction:column; align-items:center; justify-content:center; }
+        #imgContainer { max-height: 70vh; overflow-y: auto; padding: 10px; text-align: center; width: 100%; }
+        #imgContainer img { border: 2px solid white; max-width: 90%; }
+        .voice-box { background:white; padding:20px; border-radius:10px; text-align:center; width:80%; max-width:300px; }
+        .refresh-btn { color: white; font-size: 20px; margin-left: 35px; cursor: pointer; padding: 5px; }
+
+        @media print { .app-header, .input-dock, .action-bar, .sidebar, .search-box, .card-btn, #imgPreviewModal, .refresh-btn { display: none !important; } body, .main-container, .view-section, .scroll-area { height: auto; overflow: visible; display: block; margin: 0; padding: 0; } #view-pos { display: block; } .paper-bill { box-shadow: none; margin: 0; width: 100%; max-width: 58mm; border: none; padding: 0; } }
+    </style>
+</head>
+<body onload="checkNotiDot()">
+
+    <div id="authOverlay">
+        <h1 style="color:white; margin-bottom:20px; font-weight:900; letter-spacing:2px;">ACS POS</h1>
+        <div class="auth-box">
+            <div class="auth-tabs">
+                <div class="auth-tab active" onclick="switchAuthTab('login')">Login</div>
+                <div class="auth-tab" onclick="switchAuthTab('signup')">Sign In</div>
+                <div class="auth-tab" onclick="switchAuthTab('premium')">Premium</div>
+            </div>
+
+            <div id="form-login" class="auth-form active">
+                <input type="number" id="logMobile" class="auth-input" placeholder="Your Mobile Number">
+                <input type="password" id="logPass" class="auth-input" placeholder="Your Password">
+                <button class="auth-btn" onclick="loginUser()">Login</button>
+                <div style="text-align:center; margin-top:10px;">
+                    <a href="#" onclick="showForgotPass()" style="color:#e74c3c; font-size:14px; text-decoration:none; font-weight:bold;">Forgot Password?</a>
+                </div>
+                <div style="text-align:center; margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
+                    <a href="https://wa.me/918252900810?text=I need help with my ACS POS account." target="_blank" style="color:#25D366; font-size:15px; text-decoration:none; font-weight:bold;"><i class="fab fa-whatsapp"></i> Support for Enquiry</a>
+                </div>
+            </div>
+
+            <div id="form-signup" class="auth-form">
+                <h4 style="margin:0; color:#2c3e50;">User Details</h4>
+                <input type="text" id="regName" class="auth-input" placeholder="Your Name">
+                <input type="number" id="regMobile" class="auth-input" placeholder="Mobile Number">
+                <input type="password" id="regPass" class="auth-input" placeholder="Create Password">
+                
+                <h4 style="margin:5px 0 0 0; color:#2c3e50; font-size:14px;">Password Recovery Question</h4>
+                <select id="regQuestion" class="auth-input">
+                    <option value="pet">Aapke pahle pet ka naam?</option>
+                    <option value="school">Aapke pahle school ka naam?</option>
+                    <option value="friend">Aapke best friend ka naam?</option>
+                    <option value="city">Aapki birth city kya hai?</option>
+                    <option value="color">Aapka favourite color?</option>
+                </select>
+                <input type="text" id="regAnswer" class="auth-input" placeholder="Your Answer">
+
+                <h4 style="margin:10px 0 0 0; color:#2c3e50;">Shop Details</h4>
+                <p style="color:red; font-size:12px; margin:0 0 5px 0; font-weight:bold;">नोट: यह शॉप डिटेल्स आपके बिल में मेंशन होगी।</p>
+                <input type="text" id="regShopName" class="auth-input" placeholder="Shop Name (e.g. ACS Store)">
+                <input type="text" id="regShopAddress" class="auth-input" placeholder="Shop Address">
+                <input type="number" id="regShopMobile" class="auth-input" placeholder="Shop Mobile Number">
+                
+                <button class="auth-btn" style="background:#27ae60;" onclick="registerUser()">Create Account</button>
+            </div>
+
+            <div id="form-premium" class="auth-form">
+                <p style="text-align:center; font-size:14px; color:#555; margin-bottom:5px; font-weight:bold;">Admin Dashboard Login</p>
+                <input type="password" id="premPass" class="auth-input" placeholder="Enter Premium Passcode">
+                <button class="auth-btn" style="background:#8e44ad;" onclick="loginPremium()">Login as Admin</button>
+            </div>
+
+            <div id="form-forgot" class="auth-form">
+                <h4 style="margin:0; color:#e74c3c;">Reset Password</h4>
+                <input type="number" id="fgtMobile" class="auth-input" placeholder="Enter Registered Mobile No.">
+                <button class="auth-btn" style="background:#f39c12;" onclick="fetchSecurityQuestion()">Get Question</button>
+                
+                <div id="fgtQuestionArea" style="display:none; flex-direction:column; gap:10px; margin-top:10px;">
+                    <p id="fgtQuestionText" style="font-weight:bold; font-size:14px; margin:0; color:#2980b9;"></p>
+                    <input type="text" id="fgtAnswer" class="auth-input" placeholder="Enter Your Answer">
+                    <input type="password" id="fgtNewPass" class="auth-input" placeholder="Create New Password">
+                    <button class="auth-btn" style="background:#2ecc71;" onclick="resetPassword()">Update Password</button>
+                </div>
+                <button class="auth-btn" style="background:#95a5a6; margin-top:10px;" onclick="switchAuthTab('login')">Back to Login</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="adminOverlay">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <h2 style="color:#2c3e50; margin:0;">Premium Users Dashboard</h2>
+            <button class="auth-btn auth-btn-alt" style="padding:8px 15px; margin:0;" onclick="closeAdmin()"><i class="fas fa-sign-out-alt"></i> Exit</button>
+        </div>
+        <input type="text" id="adminSearch" class="auth-input" placeholder="Search user by name, shop or mobile..." onkeyup="renderAdminUsers()" style="margin-bottom:20px; font-size:16px;">
+        <div id="adminUserList" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+
+
+    <div class="app-header">
+        <div style="display:flex; align-items:center;">
+            <div onclick="toggleMenu()" style="padding: 5px;"><i class="fas fa-bars" style="font-size:24px;"></i></div>
+            <div onclick="location.reload()" class="refresh-btn"><i class="fas fa-sync-alt"></i></div>
+        </div>
+        <div id="headerPosName" style="font-weight:bold; font-size:18px;">ACS POS</div>
+        
+        <div onclick="openNotiModal()" style="position:relative; cursor:pointer; padding:5px;">
+            <i class="fas fa-bell" style="font-size:22px; color:#f1c40f;"></i>
+            <span id="notiDot" style="display:none; position:absolute; top:2px; right:2px; color:red; font-size:12px;">🔴</span>
+        </div>
+    </div>
+
+    <div class="main-container">
+        <div id="view-pos" class="view-section active-view">
+            <div class="input-dock">
+                <div class="input-row">
+                    <input type="text" id="iName" placeholder="Item Name (बोलें/लिखें)" onkeyup="suggestProducts()" autocomplete="off">
+                    <button id="btnPosMic" class="btn btn-mic" onclick="toggleDictation('iName', 'btnPosMic')"><i class="fas fa-microphone"></i></button>
+                    <button class="btn btn-scan" onclick="startScanner('pos')"><i class="fas fa-barcode"></i></button>
+                    <div id="suggestBox" class="suggest-box"></div>
+                </div>
+                <div class="input-row">
+                    <input type="number" id="iPrice" placeholder="Rate">
+                    <input type="number" id="iQty" placeholder="Qty" value="1">
+                    <button class="btn btn-add" onclick="addItem()">ADD</button>
+                </div>
+                <div class="input-row"><select id="payMode" style="background:#fff; color:#000;"><option value="CASH">💵 CASH</option><option value="ONLINE">📱 ONLINE (UPI)</option></select></div>
+            </div>
+
+            <div class="scroll-area">
+                <div class="paper-wrapper">
+                    <div class="paper-bill" id="billPaper">
+                        <div id="dueMark" style="display:none; position:absolute; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-30deg); border:4px solid red; color:red; font-size:60px; font-weight:900; opacity:0.3; padding:10px;">DUE</div>
+                        
+                        <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:5px; margin-bottom:10px;">
+                            <div id="billShopName" style="font-size:20px; font-weight:900; color:#c0392b;">ACS KIRANA STORE</div>
+                            <div id="billShopAddress">Address Details Here</div>
+                            <div id="billShopMobile">Mo: 0000000000</div>
+                            <div style="font-weight:bold; border:1px solid #000; display:inline-block; padding:2px 5px; margin-top:3px;">Owner: <span id="billShopOwner">OWNER NAME</span></div>
+                        </div>
+
+                        <div style="display:flex; justify-content:space-between; font-size:11px;"><span id="liveDate"></span><span id="liveTime"></span></div>
+                        <div style="margin: 5px 0; border-bottom:1px solid #000; padding-bottom:5px;"><div style="display:flex; align-items:center;"><span>Name: </span><input type="text" id="cName" placeholder="Customer Name" style="border:none; border-bottom:1px dotted #000; width:60%; margin-left:5px;"></div></div>
+                        <table class="r-table" id="billTable"><thead><tr><th style="width:45%">ITEM</th><th style="width:20%">RATE</th><th style="width:10%">Q</th><th style="width:25%; text-align:right;">AMT</th><th></th></tr></thead><tbody></tbody></table>
+                        <div style="margin-top:10px; border-top:2px solid #000; padding-top:5px;">
+                            <div style="display:flex; justify-content:space-between;"><span>Total:</span><span id="subTotal">0.00</span></div>
+                            <div style="display:flex; justify-content:space-between;"><span>Disc:</span><span>- <input type="number" id="discountVal" style="width:40px; text-align:right; border-bottom:1px solid #000;" placeholder="0" onkeyup="updateTotal()"></span></div>
+                            <div style="font-size:16px; font-weight:900; border-top:1px solid #000; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;"><span>GRAND TOTAL:</span><span>₹ <span id="grandTotal">0.00</span></span></div>
+                            <div style="text-align:right; font-size:11px; margin-top:2px;">Paid via: <span id="billPayMode">CASH</span></div>
+                        </div>
+                        
+                        <div style="margin-top:20px; width:100px; height:100px; border:3px solid #d63031; border-radius:50%; display:flex; flex-direction:column; justify-content:center; align-items:center; color:#d63031; font-weight:900; font-size:10px; transform:rotate(-15deg); margin-left:auto; margin-right:auto; background:rgba(255,255,255,0.8);">
+                            <div style="border:1px solid #d63031; width:90%; height:90%; border-radius:50%; display:flex; flex-direction:column; justify-content:center; align-items:center;"><div id="stampName">ACS</div><div style="font-size:14px; border-top:1px solid red; border-bottom:1px solid red;">ACS</div><div>STORE</div></div>
+                        </div>
+                        <div style="text-align:center; margin-top:10px; font-size:10px; color:#555;"><div>POWERED BY ACS</div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="view-rough" class="view-section" style="background:#ecf0f1;">
+            <div style="background:#34495e; color:white; padding:15px; font-weight:bold; font-size:18px; text-align:center;">🧾 Rough Bill Maker (AI)</div>
+            <div style="display:flex; flex-direction:column; flex:1; padding:15px; overflow-y:auto;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                    <span style="font-weight:bold; color:#2c3e50; font-size:16px;">Type or Speak items</span>
+                    <button id="btnRoughMic" class="btn btn-mic" style="width:auto; padding:8px 15px;" onclick="toggleDictation('roughBillText', 'btnRoughMic')"><i class="fas fa-microphone"></i> Bol Kar Likhen</button>
+                </div>
+                <textarea id="roughBillText" style="flex:1; width:100%; border:1px solid #ccc; border-radius:5px; padding:15px; font-size:18px; font-family:sans-serif; resize:none;" placeholder="रफ़ बिल यहाँ लिखें या माइक चालू करके लगातार बोलें...&#10;जैसे:&#10;250 का साबुन&#10;नीचे (niche)&#10;2 किलो चीनी&#10;50 वाला 2 तेल"></textarea>
+                <button style="background:#8e44ad; color:white; border:none; padding:15px; font-size:18px; font-weight:bold; border-radius:5px; margin-top:15px; cursor:pointer; box-shadow:0 4px 6px rgba(0,0,0,0.2);" onclick="analyzeRoughBill()"><i class="fas fa-magic"></i> ✨ Create Smart Bill</button>
+            </div>
+        </div>
+
+        <div id="view-notepad" class="view-section" style="background:#fff;">
+            <div id="notepad-list-view" style="display:flex; flex-direction:column; height:100%; background:#ecf0f1;">
+                <div class="search-box" style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="color:white; font-weight:bold; font-size:18px;">📝 All Notes</span>
+                    <button class="btn" style="background:#27ae60; padding:10px 15px; font-size:16px;" onclick="createNewNote()">+ New Note</button>
+                </div>
+                <div class="scroll-area" id="notesListContainer"></div>
+            </div>
+            <div id="notepad-editor-view" style="display:none; flex-direction:column; height:100%;">
+                <div style="background:#34495e; padding:10px; display:flex; justify-content:space-between; align-items:center;">
+                    <button class="btn" style="background:#7f8c8d; padding:10px;" onclick="closeNoteEditor()"><i class="fas fa-arrow-left"></i></button>
+                    <input type="text" id="noteTitle" placeholder="Title (e.g. List)" style="flex:1; margin:0 10px; padding:10px; font-size:16px;">
+                    <button class="btn" style="background:#27ae60; padding:10px 20px; font-size:16px;" onclick="saveNote()">Save</button>
+                </div>
+                <div class="rich-toolbar">
+                    <button onclick="formatText('bold')" title="Bold"><i class="fas fa-bold"></i></button>
+                    <button onclick="formatText('italic')" title="Italic"><i class="fas fa-italic"></i></button>
+                    <button onclick="formatText('underline')" title="Underline"><i class="fas fa-underline"></i></button>
+                    <button onclick="document.getElementById('noteImageInput').click()" title="Attach Photo"><i class="fas fa-image"></i></button>
+                    <input type="file" id="noteImageInput" style="display:none" accept="image/*" onchange="insertNoteImage(this)">
+                </div>
+                <div id="noteEditor" contenteditable="true" data-placeholder="यहाँ टाइप करें..."></div>
+            </div>
+        </div>
+
+        <div id="view-dues" class="view-section"><div class="search-box"><input type="text" id="dueSearch" placeholder="🔍 Search Due..." onkeyup="renderList('dues')"></div><div class="scroll-area"><div class="list-wrapper" id="duesListContainer"></div></div></div>
+        <div id="view-history" class="view-section"><div class="search-box"><input type="text" id="histSearch" placeholder="🔍 Search History..." onkeyup="renderList('history')"></div><div class="scroll-area"><div class="list-wrapper" id="historyListContainer"></div></div></div>
+        <div id="view-products" class="view-section"><div class="search-box"><div class="input-row"><input type="text" id="prodSearch" placeholder="Search Global Products..." onkeyup="renderProductList()"><button class="btn btn-scan" onclick="startScanner('product_add')"><i class="fas fa-plus"></i></button></div></div><div class="scroll-area"><div class="list-wrapper" id="productList"></div></div></div>
+
+    </div>
+
+    <div class="action-bar">
+        <button class="action-btn btn-gen" onclick="handleBillAction()"><i class="fas fa-image"></i><span>BILL</span></button>
+        <button class="action-btn btn-prt" onclick="handlePrintAction()"><i class="fas fa-print"></i><span>PRINT</span></button>
+        <button class="action-btn btn-shr" onclick="handleShareAction()"><i class="fas fa-share-alt"></i><span>SHARE</span></button>
+        <button class="action-btn btn-due" onclick="initiateDueAction()"><i class="fas fa-user-clock"></i><span>ADD DUE</span></button>
+    </div>
+
+    <div class="modal-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+    <div class="sidebar" id="sidebar">
+        <div style="padding:15px; color:white; border-bottom:1px solid #444; font-size:14px;">Logged in as: <br><b id="sidebarUserName" style="color:#f1c40f; font-size:18px;">-</b></div>
+        <a onclick="switchView('view-pos')"><i class="fas fa-receipt"></i> Billing (POS)</a>
+        <a onclick="switchView('view-rough')"><i class="fas fa-magic"></i> Rough Bill Maker</a>
+        <a onclick="switchView('view-dues')"><i class="fas fa-book-open"></i> Due List (Udhaar)</a>
+        <a onclick="switchView('view-products')"><i class="fas fa-boxes"></i> Cloud Product List</a>
+        <a onclick="switchView('view-notepad')"><i class="fas fa-sticky-note"></i> Notepad</a>
+        <a onclick="switchView('view-history')"><i class="fas fa-history"></i> Bill History</a>
+        <hr style="border-color:#444; margin:10px 0;">
+        <a onclick="logoutUser()" style="color:#e74c3c;"><i class="fas fa-sign-out-alt"></i> Logout</a>
+        <a href="https://wa.me/918252900810?text=Help" target="_blank"><i class="fab fa-whatsapp"></i> Help Center</a>
+        <a onclick="backupData()"><i class="fas fa-cloud-download-alt"></i> Backup Data</a>
+    </div>
+
+    <div id="notiModal">
+        <div style="background:white; width:90%; max-width:400px; border-radius:10px; overflow:hidden; display:flex; flex-direction:column; max-height:80vh;">
+            <div style="background:#1a252f; color:white; padding:15px; display:flex; justify-content:space-between; align-items:center;">
+                <span style="font-weight:bold; font-size:18px;">🔔 Notifications</span>
+                <div>
+                    <button onclick="addNotification()" style="background:#27ae60; color:white; border:none; padding:5px 10px; border-radius:5px; margin-right:10px; font-weight:bold;">+ Add</button>
+                    <button onclick="closeNotiModal()" style="background:#c0392b; color:white; border:none; padding:5px 10px; border-radius:5px;"><i class="fas fa-times"></i></button>
+                </div>
+            </div>
+            <div id="notiList" style="padding:15px; overflow-y:auto; flex:1; background:#ecf0f1;"></div>
+        </div>
+    </div>
+
+    <div id="imgPreviewModal"><div style="color:white; margin-bottom:10px; font-weight:bold;">Bill Generated</div><div id="imgContainer"></div><div style="margin-top:20px; display:flex; gap:10px;"><button onclick="shareImageToDrive()" style="background:#2ecc71; color:white; border:none; padding:10px 20px; font-size:16px; border-radius:5px;"><i class="fas fa-share-alt"></i> Share</button><button onclick="document.getElementById('imgPreviewModal').style.display='none'" style="background:red; color:white; border:none; padding:10px 20px; font-size:16px; border-radius:5px;">Close</button></div></div>
+    <div id="scannerModal"><div id="reader" style="width:300px; height:300px; background:white;"></div><button onclick="closeScanner()" style="background:red; color:white; border:none; padding:10px; margin-top:20px;">CLOSE</button></div>
+    <div id="voiceModal"><div class="voice-box"><h3 style="color:black; margin-top:0;">🎤 Voice Note</h3><p id="voiceStatus" style="color:#c0392b; font-weight:bold;">क्या आप वॉयस मैसेज जोड़ना चाहते हैं?</p><div style="display:flex; justify-content:center; gap:10px; margin-bottom:15px;"><button id="btnStartVoice" onclick="startVoiceRecord()" style="background:#27ae60; color:white; padding:10px 15px; border:none; border-radius:5px; font-weight:bold;"><i class="fas fa-play"></i> Start Record</button><button id="btnStopVoice" onclick="stopVoiceRecord()" style="background:#c0392b; color:white; padding:10px 15px; border:none; border-radius:5px; font-weight:bold; display:none;"><i class="fas fa-stop"></i> Stop & Save</button></div><button onclick="skipVoiceRecord()" style="background:#555; color:white; padding:10px; border:none; border-radius:5px; width:100%; font-weight:bold;">Skip (Without Voice)</button></div></div>
+
+    <script>
+        // --- FIREBASE CONFIGURATION & AUTH LOGIC ---
+        const firebaseConfig = {
+          apiKey: "AIzaSyCsoHqAZOZ6b1K2KFW6DwaT42Pw_tVEKZA",
+          authDomain: "acs-pos.firebaseapp.com",
+          databaseURL: "https://acs-pos-default-rtdb.firebaseio.com",
+          projectId: "acs-pos",
+          storageBucket: "acs-pos.firebasestorage.app",
+          messagingSenderId: "939489591586",
+          appId: "1:939489591586:web:37c8e079ad8aecf911257b"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const database = firebase.database();
+
+        let currentUserData = null;
+        let globalProducts = {};
+
+        // Load Global Products from Firebase Realtime DB
+        database.ref('products').on('value', (snapshot) => {
+            globalProducts = snapshot.val() || {};
+            // Keep local storage copy sync for older code compatibility
+            localStorage.setItem('kamdeo_products', JSON.stringify(globalProducts));
+            if(document.getElementById('productList')) renderProductList();
+        });
+
+        // AUTH UI SWITCHER
+        function switchAuthTab(tab) {
+            document.querySelectorAll('.auth-tab').forEach(e => e.classList.remove('active'));
+            document.querySelectorAll('.auth-form').forEach(e => e.classList.remove('active'));
+            if(tab !== 'forgot') {
+                document.querySelector(`.auth-tab[onclick="switchAuthTab('${tab}')"]`).classList.add('active');
+                document.getElementById(`form-${tab}`).classList.add('active');
+            } else {
+                document.getElementById(`form-forgot`).classList.add('active');
+            }
+        }
+        function showForgotPass() { switchAuthTab('forgot'); }
+
+        // REGISTER (SIGN UP)
+        function registerUser() {
+            const name = document.getElementById('regName').value; const mobile = document.getElementById('regMobile').value; const pass = document.getElementById('regPass').value;
+            const q = document.getElementById('regQuestion').value; const ans = document.getElementById('regAnswer').value;
+            const sName = document.getElementById('regShopName').value; const sAdd = document.getElementById('regShopAddress').value; const sMob = document.getElementById('regShopMobile').value;
+
+            if(!name || !mobile || !pass || !ans || !sName || !sAdd || !sMob) { alert("Please fill all details correctly!"); return; }
+
+            database.ref('users/' + mobile).once('value', (snapshot) => {
+                if(snapshot.exists()) { alert("User with this mobile already exists! Please Login."); } 
+                else {
+                    database.ref('users/' + mobile).set({ name, mobile, pass, question: q, answer: ans.toLowerCase(), shopName: sName, shopAddress: sAdd, shopMobile: sMob });
+                    alert("Account Created Successfully! Please Login.");
+                    switchAuthTab('login');
+                }
+            });
+        }
+
+        // LOGIN
+        function loginUser() {
+            const mobile = document.getElementById('logMobile').value; const pass = document.getElementById('logPass').value;
+            if(!mobile || !pass) { alert("Enter Mobile and Password!"); return; }
+
+            database.ref('users/' + mobile).once('value', (snapshot) => {
+                if(snapshot.exists()) {
+                    const data = snapshot.val();
+                    if(data.pass === pass) {
+                        currentUserData = data;
+                        applyUserDataToPOS();
+                        document.getElementById('authOverlay').style.display = 'none';
+                    } else { alert("Incorrect Password!"); }
+                } else { alert("User not found! Please Sign In First."); }
+            });
+        }
+
+        function logoutUser() {
+            currentUserData = null;
+            document.getElementById('authOverlay').style.display = 'flex';
+            toggleMenu();
+        }
+
+        // DYNAMIC POS UPDATE
+        function applyUserDataToPOS() {
+            if(!currentUserData) return;
+            document.getElementById('sidebarUserName').innerText = currentUserData.name.toUpperCase();
+            document.getElementById('billShopName').innerText = currentUserData.shopName.toUpperCase();
+            document.getElementById('billShopAddress').innerText = currentUserData.shopAddress;
+            document.getElementById('billShopMobile').innerText = "Mo: " + currentUserData.shopMobile;
+            document.getElementById('billShopOwner').innerText = currentUserData.name.toUpperCase();
+            document.getElementById('stampName').innerText = currentUserData.shopName.substring(0,8).toUpperCase();
+        }
+
+        // FORGOT PASSWORD LOGIC
+        let tempForgotUser = null;
+        function fetchSecurityQuestion() {
+            const mobile = document.getElementById('fgtMobile').value;
+            if(!mobile) { alert("Enter Registered Mobile Number!"); return; }
+
+            database.ref('users/' + mobile).once('value', (snapshot) => {
+                if(snapshot.exists()) {
+                    tempForgotUser = snapshot.val(); let qText = "";
+                    switch(tempForgotUser.question) {
+                        case 'pet': qText = "Aapke pahle pet ka naam?"; break;
+                        case 'school': qText = "Aapke pahle school ka naam?"; break;
+                        case 'friend': qText = "Aapke best friend ka naam?"; break;
+                        case 'city': qText = "Aapki birth city kya hai?"; break;
+                        case 'color': qText = "Aapka favourite color?"; break;
+                    }
+                    document.getElementById('fgtQuestionText').innerText = qText;
+                    document.getElementById('fgtQuestionArea').style.display = 'flex';
+                } else { alert("User not found in system!"); }
+            });
+        }
+
+        function resetPassword() {
+            const ans = document.getElementById('fgtAnswer').value.toLowerCase(); const newPass = document.getElementById('fgtNewPass').value;
+            if(!ans || !newPass) { alert("Fill security answer and new password!"); return; }
+            if(ans === tempForgotUser.answer) {
+                database.ref('users/' + tempForgotUser.mobile).update({ pass: newPass });
+                alert("Password Updated Successfully! Please login with your new password.");
+                switchAuthTab('login'); document.getElementById('fgtQuestionArea').style.display = 'none';
+            } else { alert("गलत उत्तर! (Incorrect Security Answer)"); }
+        }
+
+        // PREMIUM ADMIN LOGIC
+        function loginPremium() {
+            const pass = document.getElementById('premPass').value;
+            if(pass === "24361") { document.getElementById('adminOverlay').style.display = 'flex'; loadAdminUsers(); } 
+            else { alert("Wrong Premium Passcode!"); }
+        }
+        function closeAdmin() { document.getElementById('adminOverlay').style.display = 'none'; document.getElementById('premPass').value = ''; }
+        
+        let allUsersData = {};
+        function loadAdminUsers() {
+            database.ref('users').on('value', (snapshot) => {
+                allUsersData = snapshot.val() || {}; renderAdminUsers();
+            });
+        }
+        function renderAdminUsers() {
+            const search = document.getElementById('adminSearch').value.toLowerCase(); const list = document.getElementById('adminUserList'); list.innerHTML = '';
+            Object.keys(allUsersData).forEach(mobile => {
+                const u = allUsersData[mobile];
+                if(u.name.toLowerCase().includes(search) || u.mobile.includes(search) || u.shopName.toLowerCase().includes(search)) {
+                    list.innerHTML += `<div style="background:white; padding:15px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:5px solid #8e44ad;">
+                        <div style="font-weight:bold; font-size:16px; color:#2c3e50;">${u.name} (${u.mobile})</div>
+                        <div style="font-size:13px; color:#34495e; margin-top:5px;"><b>Shop:</b> ${u.shopName} | <b>Add:</b> ${u.shopAddress}</div>
+                        <div style="font-size:12px; color:#c0392b; margin-top:5px; background:#fadbd8; padding:5px; border-radius:4px;"><b>Pass:</b> ${u.pass} | <b>Sec. Ans:</b> ${u.answer}</div>
+                        <button class="auth-btn auth-btn-alt" style="margin-top:10px; padding:5px 10px; font-size:12px;" onclick="deleteUser('${mobile}')"><i class="fas fa-trash"></i> Delete Fraud User</button>
+                    </div>`;
+                }
+            });
+        }
+        function deleteUser(mobile) { if(confirm("Permanently delete this user from database?")) { database.ref('users/' + mobile).remove(); alert("User deleted!"); } }
+
+
+        // --- ORIGINAL APP JS LOGIC BELOW ---
+        const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+        function playSound(t){if(audioCtx.state==='suspended')audioCtx.resume();const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);if(t==='scan'){o.type='sine';o.frequency.setValueAtTime(1200,audioCtx.currentTime);g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.1);}else{o.type='triangle';o.frequency.setValueAtTime(600,audioCtx.currentTime);o.frequency.linearRampToValueAtTime(800,audioCtx.currentTime+0.1);g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.3);}}
+        function updateTime(){const n=new Date();document.getElementById('liveDate').innerText=n.toLocaleDateString('en-IN');document.getElementById('liveTime').innerText=n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});}
+        setInterval(updateTime,1000); updateTime();
+        
+        function toggleMenu(){const s=document.getElementById('sidebar');const o=document.getElementById('menuOverlay');if(s.classList.contains('active')){s.classList.remove('active');o.style.display='none';}else{s.classList.add('active');o.style.display='block';}}
+        function switchView(v){document.querySelectorAll('.view-section').forEach(e=>e.classList.remove('active-view'));document.getElementById(v).classList.add('active-view');toggleMenu();if(v==='view-dues')renderList('dues');if(v==='view-history')renderList('history');if(v==='view-products')renderProductList();if(v==='view-notepad')loadNotesList();}
+        
+        function getData(k){return JSON.parse(localStorage.getItem(k)||'[]');}
+        function saveData(k,d){localStorage.setItem(k,JSON.stringify(d));}
+        function getProds(){return globalProducts;} // Now using Global Sync
+        
+        // --- NOTIFICATION SYSTEM ---
+        function checkNotiDot() { if(localStorage.getItem('kamdeo_new_noti') === 'true') document.getElementById('notiDot').style.display = 'block'; else document.getElementById('notiDot').style.display = 'none'; }
+        function openNotiModal() { localStorage.setItem('kamdeo_new_noti', 'false'); checkNotiDot(); renderNotiList(); document.getElementById('notiModal').style.display = 'flex'; }
+        function closeNotiModal() { document.getElementById('notiModal').style.display = 'none'; }
+        function renderNotiList() {
+            const list = JSON.parse(localStorage.getItem('kamdeo_notis') || '[]'); const container = document.getElementById('notiList'); container.innerHTML = '';
+            if(list.length === 0) container.innerHTML = '<div style="text-align:center; color:#777; margin-top:20px;">No notifications yet.</div>';
+            list.forEach((n, idx) => { container.innerHTML += `<div style="background:white; padding:10px; border-radius:5px; margin-bottom:10px; box-shadow:0 1px 3px rgba(0,0,0,0.2); position:relative;"><div style="font-size:11px; color:#888; margin-bottom:5px;">${n.date}</div><div style="font-size:15px; color:#333; font-weight:bold;">${n.msg}</div><i class="fas fa-trash" style="position:absolute; top:10px; right:10px; color:#c0392b; cursor:pointer;" onclick="delNoti(${idx})"></i></div>`; });
+        }
+        function addNotification() {
+            const pass = prompt("Enter Password (24361):");
+            if(pass === "24361") { const msg = prompt("Enter new message:"); if(msg) { const list = JSON.parse(localStorage.getItem('kamdeo_notis') || '[]'); list.unshift({msg: msg, date: new Date().toLocaleString()}); localStorage.setItem('kamdeo_notis', JSON.stringify(list)); localStorage.setItem('kamdeo_new_noti', 'true'); renderNotiList(); checkNotiDot(); } } else if (pass !== null) alert("Incorrect Password!");
+        }
+        function delNoti(idx) { if(confirm("Delete this notification?")) { const list = JSON.parse(localStorage.getItem('kamdeo_notis') || '[]'); list.splice(idx, 1); localStorage.setItem('kamdeo_notis', JSON.stringify(list)); renderNotiList(); } }
+
+        // --- 🎤 CONTINUOUS AI MIC SYSTEM 🎤 ---
+        let isMicOn = false; let recognition = null; let currentTargetId = null; let currentBtnId = null;
+
+        function toggleDictation(targetId, btnId) {
+            const btn = document.getElementById(btnId);
+            if(isMicOn && currentTargetId === targetId) { isMicOn = false; if(recognition) recognition.stop(); return; }
+            if(recognition) { isMicOn = false; recognition.stop(); } 
+            isMicOn = true; currentTargetId = targetId; currentBtnId = btnId; startRec();
+        }
+
+        function startRec() {
+            if (!('webkitSpeechRecognition' in window)) { alert("Mic not supported in this browser."); return; }
+            recognition = new webkitSpeechRecognition(); recognition.lang = 'hi-IN'; recognition.continuous = true;
+            const btn = document.getElementById(currentBtnId);
+
+            recognition.onstart = () => { btn.classList.add('mic-listening'); if(currentTargetId === 'roughBillText') btn.innerHTML = '<i class="fas fa-microphone"></i> Sun Raha Hai...'; };
+
+            recognition.onresult = (e) => {
+                let newText = e.results[e.results.length - 1][0].transcript.trim(); let target = document.getElementById(currentTargetId);
+                if(currentTargetId === 'roughBillText') {
+                    newText = newText.replace(/(niche|neeche|nicche|नीचे|nichee)/gi, '\n').trim();
+                    let current = target.value; target.value = current + (current.endsWith('\n') || current === '' ? "" : " ") + newText; target.scrollTop = target.scrollHeight; 
+                } else { let current = target.value; target.value = current + (current ? " " : "") + newText; suggestProducts(); }
+            };
+
+            recognition.onend = () => { if(isMicOn) { recognition.start(); } else { btn.classList.remove('mic-listening'); if(currentTargetId === 'roughBillText') btn.innerHTML = '<i class="fas fa-microphone"></i> Bol Kar Likhen'; } };
+            recognition.onerror = (e) => { if(e.error === 'no-speech') return; isMicOn = false; btn.classList.remove('mic-listening'); if(currentTargetId === 'roughBillText') btn.innerHTML = '<i class="fas fa-microphone"></i> Bol Kar Likhen'; };
+            recognition.start();
+        }
+
+        // --- SUGGESTION ---
+        function suggestProducts() {
+            const val = document.getElementById('iName').value.toLowerCase(); const box = document.getElementById('suggestBox');
+            if (!val) { box.style.display = 'none'; return; }
+            const db = getProds(); let html = '';
+            Object.keys(db).forEach(k => { const p = db[k]; if (p.name.toLowerCase().includes(val) || k.includes(val)) { const safeName = p.name.replace(/'/g, "\\'"); html += `<div class="suggest-item" onclick="selectSuggest('${safeName}', '${p.price}')"><span>${p.name}</span><span>₹${p.price}</span></div>`; } });
+            if(html){ box.innerHTML = html; box.style.display = 'block'; } else { box.style.display = 'none'; }
+        }
+        function selectSuggest(name, price) { document.getElementById('iName').value = name; document.getElementById('iPrice').value = price; document.getElementById('suggestBox').style.display = 'none'; document.getElementById('iQty').focus(); }
+        document.addEventListener('click', function(e) { if(e.target.id !== 'iName' && document.getElementById('suggestBox')) document.getElementById('suggestBox').style.display = 'none'; });
+
+        // --- NOTEPAD ---
+        let currentNoteId = null;
+        function loadNotesList() {
+            const notes = JSON.parse(localStorage.getItem('kamdeo_notes') || '[]'); const container = document.getElementById('notesListContainer'); container.innerHTML = '';
+            notes.forEach(note => { let plainText = note.content.replace(/<[^>]+>/g, ' '); container.innerHTML += `<div class="data-card" style="cursor:pointer;" onclick="openNote(${note.id})"><div style="flex:1;"><div style="font-weight:bold; font-size:16px; color:#2c3e50;">${note.title || 'Untitled'}</div><div style="font-size:11px; color:#7f8c8d; margin-bottom:5px;">${note.date}</div><div style="font-size:13px; color:#555; max-height:20px; overflow:hidden;">${plainText.substring(0,50)}...</div></div><button class="card-btn btn-del" onclick="event.stopPropagation(); deleteNote(${note.id})"><i class="fas fa-trash"></i></button></div>`; });
+        }
+        function createNewNote() { currentNoteId = Date.now(); document.getElementById('noteTitle').value = ''; document.getElementById('noteEditor').innerHTML = ''; document.getElementById('notepad-list-view').style.display = 'none'; document.getElementById('notepad-editor-view').style.display = 'flex'; }
+        function openNote(id) { const notes = JSON.parse(localStorage.getItem('kamdeo_notes') || '[]'); const note = notes.find(n => n.id === id); if(note) { currentNoteId = note.id; document.getElementById('noteTitle').value = note.title; document.getElementById('noteEditor').innerHTML = note.content; document.getElementById('notepad-list-view').style.display = 'none'; document.getElementById('notepad-editor-view').style.display = 'flex'; } }
+        function closeNoteEditor() { document.getElementById('notepad-list-view').style.display = 'flex'; document.getElementById('notepad-editor-view').style.display = 'none'; loadNotesList(); }
+        function saveNote() { const title = document.getElementById('noteTitle').value; const content = document.getElementById('noteEditor').innerHTML; let notes = JSON.parse(localStorage.getItem('kamdeo_notes') || '[]'); const index = notes.findIndex(n => n.id === currentNoteId); if(index > -1) { notes[index].title = title; notes[index].content = content; notes[index].date = new Date().toLocaleString(); } else { notes.unshift({ id: currentNoteId, title, content, date: new Date().toLocaleString() }); } localStorage.setItem('kamdeo_notes', JSON.stringify(notes)); playSound('bill'); alert("Note Saved!"); closeNoteEditor(); }
+        function deleteNote(id) { if(confirm("Delete this note?")) { let notes = JSON.parse(localStorage.getItem('kamdeo_notes') || '[]'); notes = notes.filter(n => n.id !== id); localStorage.setItem('kamdeo_notes', JSON.stringify(notes)); loadNotesList(); } }
+        function formatText(cmd, val=null) { document.execCommand(cmd, false, val); document.getElementById('noteEditor').focus(); }
+        function insertNoteImage(input) { if (input.files && input.files[0]) { const reader = new FileReader(); reader.onload = function(e) { formatText('insertHTML', `<img src="${e.target.result}"><br>`); }; reader.readAsDataURL(input.files[0]); } }
+
+        // --- AI ROUGH BILL PARSER ---
+        function analyzeRoughBill() {
+            const text = document.getElementById('roughBillText').value; if(!text.trim()) { alert("Please write/dictate something!"); return; }
+            document.getElementById('billTable').querySelector('tbody').innerHTML = ""; 
+            const lines = text.split(/[\n,और]+/); const db = getProds(); let itemsAdded = 0;
+
+            lines.forEach(line => {
+                let str = line.trim().toLowerCase(); if(!str) return;
+                str = str.replace(/\bek\b/g, '1').replace(/\bdo\b/g, '2').replace(/\bteen\b/g, '3').replace(/\bchar\b/g, '4').replace(/\bpaanch\b/g, '5').replace(/\bpanch\b/g, '5');
+                let qty = 1; let price = 0; let name = str;
+
+                let priceMatch = name.match(/(\d+)\s*(wala|vali|wale|rs\.?|rupee|rupaye|ka|ke|ki)(?:\s+(ka|ke|ki))?\b/);
+                if(priceMatch) { price = parseFloat(priceMatch[1]); name = name.replace(priceMatch[0], '').trim(); }
+
+                let qtyMatch = name.match(/^([\d\.]+)\s*(kilo|kg|pc|piece|pack|packet|lit|l|gram|gm|dabba|box)?\b\s*/);
+                if(qtyMatch) { qty = parseFloat(qtyMatch[1]); name = name.replace(qtyMatch[0], '').trim(); }
+
+                let matchedPrice = 0; let foundInDb = false;
+                for(let key in db) { let dbName = db[key].name.toLowerCase(); if(dbName.includes(name) || name.includes(dbName)) { matchedPrice = parseFloat(db[key].price); name = db[key].name; foundInDb = true; break; } }
+                if(foundInDb && price === 0) price = matchedPrice;
+                if(!foundInDb && price === 0) { let words = name.split(' '); let lastWord = words[words.length-1]; if(!isNaN(lastWord) && lastWord.trim() !== '') { price = parseFloat(lastWord); words.pop(); name = words.join(' ').trim(); } }
+
+                if(!name || name === "") name = "Item"; name = name.charAt(0).toUpperCase() + name.slice(1);
+                
+                const total = price * qty;
+                const row = document.getElementById('billTable').querySelector('tbody').insertRow();
+                row.innerHTML = `<td contenteditable="true" oninput="recalcRow(this)">${name}</td><td contenteditable="true" oninput="recalcRow(this)">${price}</td><td contenteditable="true" oninput="recalcRow(this)">${qty}</td><td class="amt" data-val="${total}" style="text-align:right;">${total.toFixed(2)}</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td>`;
+                itemsAdded++;
+            });
+            if(itemsAdded > 0) { updateTotal(); playSound('bill'); alert("✅ Smart Bill Created!"); switchView('view-pos'); } else { alert("Couldn't format."); }
+        }
+
+        // --- POS CORE & EDITABLE TABLE ---
+        document.getElementById('payMode').addEventListener('change',function(){document.getElementById('billPayMode').innerText=this.value;});
+        
+        function addItem(){
+            const n=document.getElementById('iName').value; const p=parseFloat(document.getElementById('iPrice').value); const q=parseFloat(document.getElementById('iQty').value);
+            if(!n||isNaN(p)||isNaN(q))return;
+            const t=p*q; const row=document.getElementById('billTable').querySelector('tbody').insertRow();
+            row.innerHTML=`<td contenteditable="true" oninput="recalcRow(this)">${n}</td><td contenteditable="true" oninput="recalcRow(this)">${p}</td><td contenteditable="true" oninput="recalcRow(this)">${q}</td><td class="amt" data-val="${t}" style="text-align:right;">${t.toFixed(2)}</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td>`;
+            document.getElementById('iName').value=''; document.getElementById('iPrice').value=''; document.getElementById('iQty').value='1'; updateTotal();
+        }
+        function recalcRow(cell) { const row = cell.closest('tr'); const p = parseFloat(row.cells[1].innerText.replace(/[^0-9.]/g, '')) || 0; const q = parseFloat(row.cells[2].innerText.replace(/[^0-9.]/g, '')) || 0; const t = p * q; row.cells[3].setAttribute('data-val', t); row.cells[3].innerText = t.toFixed(2); updateTotal(); }
+        function updateTotal(){ let sum=0; document.querySelectorAll('.amt').forEach(t=>sum+=parseFloat(t.getAttribute('data-val'))); document.getElementById('subTotal').innerText=sum.toFixed(2); document.getElementById('grandTotal').innerText=(sum-(parseFloat(document.getElementById('discountVal').value)||0)).toFixed(2); }
+        function resetPOS() { document.getElementById('cName').value=""; document.getElementById('iName').value=""; document.getElementById('iPrice').value=""; document.getElementById('iQty').value="1"; document.getElementById('discountVal').value=""; document.getElementById('billTable').querySelector('tbody').innerHTML=""; document.getElementById('subTotal').innerText="0.00"; document.getElementById('grandTotal').innerText="0.00"; document.getElementById('dueMark').style.display='none'; }
+
+        // --- VOICE DUE & SAVE SYSTEM ---
+        let mediaRecorder; let audioChunks = [];
+        function initiateDueAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Bill Empty!");return;} if(!document.getElementById('cName').value){alert("Customer Name Required!");return;} document.getElementById('voiceModal').style.display = 'flex'; document.getElementById('voiceStatus').innerText = "क्या आप वॉयस मैसेज जोड़ना चाहते हैं?"; document.getElementById('btnStartVoice').style.display = 'block'; document.getElementById('btnStopVoice').style.display = 'none'; }
+        async function startVoiceRecord() { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorder = new MediaRecorder(stream); audioChunks = []; mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); }; mediaRecorder.onstop = () => { const blob = new Blob(audioChunks, { type: 'audio/webm' }); const reader = new FileReader(); reader.readAsDataURL(blob); reader.onloadend = () => { finalizeDue(reader.result); } }; mediaRecorder.start(); document.getElementById('voiceStatus').innerText = "Recording... 🔴"; document.getElementById('btnStartVoice').style.display = 'none'; document.getElementById('btnStopVoice').style.display = 'block'; } catch(e) { alert("Mic Access Denied!"); skipVoiceRecord(); } }
+        function stopVoiceRecord() { if(mediaRecorder && mediaRecorder.state === "recording") { mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t=>t.stop()); } }
+        function skipVoiceRecord() { if(mediaRecorder && mediaRecorder.state === "recording") { mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t=>t.stop()); } finalizeDue(null); }
+        function finalizeDue(audioBase64) { document.getElementById('voiceModal').style.display = 'none'; document.getElementById('dueMark').style.display='block'; saveRec(true, audioBase64); playSound('bill'); alert("Added to Due!"); setTimeout(resetPOS, 500); }
+
+        function saveRec(isDue, audioBase64 = null) {
+            const c=document.getElementById('cName').value||"Unknown"; const t=document.getElementById('grandTotal').innerText; const d=document.getElementById('discountVal').value; const pm=document.getElementById('payMode').value;
+            let items=[]; document.querySelectorAll('#billTable tbody tr').forEach(r=>{items.push({name:r.cells[0].innerText,price:r.cells[1].innerText,qty:r.cells[2].innerText,total:r.cells[3].innerText});});
+            if(items.length===0) return false; const rec={id:Date.now(),date:new Date().toLocaleString(),customer:c,total:t,discount:d,payMode:pm,items:items,isDue:isDue, audio:audioBase64}; const k=isDue?'kamdeo_dues':'kamdeo_history'; let data=getData(k); data.unshift(rec); saveData(k,data); return true;
+        }
+
+        async function handleBillAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} playSound('bill'); await generateBillImage(); if(saveRec(false)) setTimeout(resetPOS, 1000); }
+        function handlePrintAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} saveRec(false); window.print(); setTimeout(resetPOS, 1000); }
+        async function handleShareAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} saveRec(false); await generateBillImage(); setTimeout(shareImageToDrive, 500); setTimeout(resetPOS, 2000); }
+
+        async function generateBillImage() { document.querySelectorAll('.fa-times').forEach(e=>e.style.display='none'); const el=document.getElementById('billPaper'); el.scrollIntoView(); const c=await html2canvas(el,{scale:2,backgroundColor:"#ffffff"}); document.querySelectorAll('.fa-times').forEach(e=>e.style.display='inline'); window.currCanvas=c; const img=document.createElement('img'); img.src=c.toDataURL(); document.getElementById('imgContainer').innerHTML=''; document.getElementById('imgContainer').appendChild(img); document.getElementById('imgPreviewModal').style.display='flex'; }
+        function shareImageToDrive(){ if(window.currCanvas) window.currCanvas.toBlob(async b=>{ const f=new File([b],"Bill.png",{type:"image/png"}); if(navigator.share){try{await navigator.share({files:[f],title:'Bill'});}catch(e){}}else{const a=document.createElement('a');a.href=window.currCanvas.toDataURL();a.download='Bill.png';a.click();} }); }
+
+        function renderList(t){
+            const cont=document.getElementById(t==='dues'?'duesListContainer':'historyListContainer'); const q=document.getElementById(t==='dues'?'dueSearch':'histSearch').value.toLowerCase(); const data=getData(t==='dues'?'kamdeo_dues':'kamdeo_history'); cont.innerHTML='';
+            data.forEach(b=>{ if(b.customer.toLowerCase().includes(q)){ const s=JSON.stringify(b).replace(/"/g,'&quot;'); let audioBtn = b.audio ? `<button class="card-btn btn-play" onclick="new Audio('${b.audio}').play()"><i class="fas fa-play"></i></button>` : ''; cont.innerHTML+=`<div class="data-card ${t==='dues'?'card-due':''}"><div><b>${b.customer}</b><br><small>${b.date} | ₹${b.total}</small></div><div style="display:flex; align-items:center;"><button class="card-btn btn-view" onclick='viewBill(${s})'><i class="fas fa-eye"></i></button>${audioBtn}${t==='dues'?`<button class="card-btn btn-wa" onclick="sendReminder('${b.customer}','${b.total}')"><i class="fab fa-whatsapp"></i></button>`:''}<button class="card-btn btn-del" onclick="delRec('${t}',${b.id})"><i class="fas fa-trash"></i></button>${t==='dues'?`<button class="card-btn" style="background:#2ecc71;" onclick="markPaid(${b.id})">Paid</button>`:''}</div></div>`; }});
+        }
+
+        async function viewBill(b){
+            document.querySelectorAll('.view-section').forEach(e=>e.classList.remove('active-view')); document.getElementById('view-pos').classList.add('active-view');
+            document.getElementById('cName').value=b.customer; document.getElementById('grandTotal').innerText=b.total; document.getElementById('discountVal').value=b.discount||0; document.getElementById('billPayMode').innerText=b.payMode||'CASH'; document.getElementById('dueMark').style.display=b.isDue?'block':'none';
+            const tbody=document.getElementById('billTable').querySelector('tbody'); tbody.innerHTML=''; 
+            b.items.forEach(i=>{tbody.innerHTML+=`<tr><td contenteditable="true" oninput="recalcRow(this)">${i.name}</td><td contenteditable="true" oninput="recalcRow(this)">${i.price}</td><td contenteditable="true" oninput="recalcRow(this)">${i.qty}</td><td class="amt" data-val="${i.total}" style="text-align:right;">${i.total}</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td></tr>`;});
+            updateTotal(); setTimeout(async()=>{await generateBillImage();},100); 
+        }
+
+        function sendReminder(n,t){window.open(`https://wa.me/?text=Hello ${n}, Pending Amount: Rs ${t}`, '_blank');}
+        function delRec(t,id){if(confirm("Delete?")){let d=getData(t==='dues'?'kamdeo_dues':'kamdeo_history').filter(b=>b.id!==id); saveData(t==='dues'?'kamdeo_dues':'kamdeo_history',d); renderList(t);}}
+        function markPaid(id){let d=getData('kamdeo_dues');let b=d.find(i=>i.id===id);if(b){b.isDue=false;let h=getData('kamdeo_history');h.unshift(b);saveData('kamdeo_history',h);saveData('kamdeo_dues',d.filter(i=>i.id!==id));renderList('dues');}}
+        function backupData(){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify({h:getData('kamdeo_history'),d:getData('kamdeo_dues'), n:getData('kamdeo_notes'), notis:getData('kamdeo_notis')}));a.download="backup.json";a.click();}
+        
+        // --- CLOUD BARCODE SCANNER ---
+        let scanner;
+        function startScanner(m){
+            document.getElementById('scannerModal').style.display='flex';
+            scanner=new Html5Qrcode("reader");
+            scanner.start({facingMode:"environment"},{fps:10,qrbox:200},(c)=>{
+                closeScanner(); playSound('scan'); const db=getProds(); 
+                if(m==='pos'){ 
+                    if(db[c]){document.getElementById('iName').value=db[c].name;document.getElementById('iPrice').value=db[c].price;} else{alert("Not Listed in Global Database");} 
+                } else if(m==='product_add'){ 
+                    if(db[c]){alert("⚠️ ALREADY LISTED GLOBALLY!\nName: "+db[c].name+"\nPrice: ₹"+db[c].price);}
+                    else{
+                        const n=prompt("New Product Name:"); const p=prompt("Price:");
+                        if(n&&p){
+                            // SAVE TO FIREBASE CLOUD INSTEAD OF LOCAL
+                            database.ref('products/' + c).set({name:n, price:p});
+                            alert("Saved Successfully to Cloud Database!");
+                        }
+                    } 
+                }
+            });
+        }
+        function closeScanner(){if(scanner)scanner.stop();document.getElementById('scannerModal').style.display='none';}
+        function renderProductList(){ 
+            const l=document.getElementById('productList'); l.innerHTML=''; const db=getProds(); const q=document.getElementById('prodSearch').value.toLowerCase(); 
+            Object.keys(db).forEach(k=>{ 
+                if(db[k].name.toLowerCase().includes(q) || k.includes(q)) 
+                    l.innerHTML+=`<div class="data-card"><div><b>${db[k].name}</b><br><small>${k}</small></div><div>₹${db[k].price}<button class="card-btn btn-edit" onclick="editProd('${k}')"><i class="fas fa-edit"></i></button></div></div>`; 
+            }); 
+        }
+        function editProd(k){ 
+            const db=getProds(); const n=prompt("Edit Name Globally:",db[k].name); const p=prompt("Edit Price Globally:",db[k].price); 
+            if(n&&p){
+                // EDIT IN FIREBASE CLOUD
+                database.ref('products/' + k).set({name:n, price:p});
+                alert("Updated in Cloud Database!");
+            } 
+        }
+    </script>
+</body>
+</html>
