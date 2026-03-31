@@ -116,7 +116,7 @@
 <body>
 
     <div id="authOverlay">
-        <img src="https://ibb.co/hFRHRQ97" alt="ACS Logo" class="auth-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3081/3081308.png'">
+        <img src="https://i.ibb.co/C3bYxVpM/acs-logo.png" alt="ACS Logo" class="auth-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3081/3081308.png'">
         <h1 style="color:white; margin:0 0 20px 0; font-weight:900; letter-spacing:2px; text-shadow: 0 2px 5px black;">ACS POS</h1>
         
         <div class="auth-box">
@@ -785,7 +785,21 @@
         function handlePrintAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} saveRec(false); window.print(); setTimeout(resetPOS, 1000); }
         async function handleShareAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} saveRec(false); await generateBillImage(); setTimeout(shareImageToDrive, 500); setTimeout(resetPOS, 2000); }
 
-        async function generateBillImage() { document.querySelectorAll('.fa-times').forEach(e=>e.style.display='none'); const el=document.getElementById('billPaper'); el.scrollIntoView(); const c=await html2canvas(el,{scale:2,backgroundColor:"#ffffff"}); document.querySelectorAll('.fa-times').forEach(e=>e.style.display='inline'); window.currCanvas=c; const img=document.createElement('img'); img.src=c.toDataURL(); document.getElementById('imgContainer').innerHTML=''; document.getElementById('imgContainer').appendChild(img); document.getElementById('imgPreviewModal').style.display='flex'; }
+        /* FIXED THIS FUNCTION (REMOVED SCROLL INTO VIEW) */
+        async function generateBillImage() { 
+            document.querySelectorAll('.fa-times').forEach(e=>e.style.display='none'); 
+            const el=document.getElementById('billPaper'); 
+            document.querySelector('.scroll-area').scrollTop = 0; /* NEW FIX */
+            const c=await html2canvas(el,{scale:2,backgroundColor:"#ffffff"}); 
+            document.querySelectorAll('.fa-times').forEach(e=>e.style.display='inline'); 
+            window.currCanvas=c; 
+            const img=document.createElement('img'); 
+            img.src=c.toDataURL(); 
+            document.getElementById('imgContainer').innerHTML=''; 
+            document.getElementById('imgContainer').appendChild(img); 
+            document.getElementById('imgPreviewModal').style.display='flex'; 
+        }
+
         function shareImageToDrive(){ if(window.currCanvas) window.currCanvas.toBlob(async b=>{ const f=new File([b],"Bill.png",{type:"image/png"}); if(navigator.share){try{await navigator.share({files:[f],title:'Bill'});}catch(e){}}else{const a=document.createElement('a');a.href=window.currCanvas.toDataURL();a.download='Bill.png';a.click();} }); }
 
         function renderList(t){
