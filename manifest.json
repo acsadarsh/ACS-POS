@@ -1,0 +1,21 @@
+{
+  "name": "ACS POS",
+  "short_name": "ACS POS",
+  "description": "Official POS App by Adarsh",
+  "start_url": "/ACS-POS/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#667eea",
+  "icons": [
+    {
+      "src": "https://i.ibb.co/hFRHRQ97/image.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://i.ibb.co/hFRHRQ97/image.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
