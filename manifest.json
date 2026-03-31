@@ -1,11 +1,11 @@
 {
   "name": "ACS POS",
   "short_name": "ACS POS",
-  "description": "Official POS App by Adarsh",
-  "start_url": "/ACS-POS/",
+  "description": "Smart Billing and POS App for ACS",
+  "start_url": "./index.html",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#667eea",
+  "background_color": "#2c3e50",
+  "theme_color": "#1a252f",
   "icons": [
     {
       "src": "https://i.ibb.co/hFRHRQ97/image.png",
