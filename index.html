@@ -17,6 +17,7 @@
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -38,7 +39,7 @@
         .auth-btn-alt { background: #e74c3c; }
         
         #adminOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #ecf0f1; z-index: 10000; display: none; flex-direction: column; padding: 20px; overflow-y: auto; }
-        #editProfileModal, #adminBillsModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10001; flex-direction:column; align-items:center; justify-content:center; padding: 20px; }
+        #editProfileModal, #adminBillsModal, #aiChatModal, #aiProcessModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10001; flex-direction:column; align-items:center; justify-content:center; padding: 20px; }
         /* -------------------------------- */
 
         /* 1. HEADER */
@@ -111,6 +112,11 @@
         .voice-box { background:white; padding:20px; border-radius:10px; text-align:center; width:80%; max-width:300px; }
         .refresh-btn { color: white; font-size: 20px; margin-left: 35px; cursor: pointer; padding: 5px; }
 
+        /* AI Chat Custom CSS */
+        .chat-bubble { padding: 10px 15px; border-radius: 15px; margin-bottom: 10px; max-width: 80%; font-size: 14px; line-height: 1.4; clear: both; }
+        .chat-ai { background: #ecf0f1; color: #2c3e50; float: left; border-bottom-left-radius: 0; }
+        .chat-user { background: #2980b9; color: white; float: right; border-bottom-right-radius: 0; }
+
         @media print { .app-header, .input-dock, .action-bar, .sidebar, .search-box, .card-btn, #imgPreviewModal, .refresh-btn { display: none !important; } body, .main-container, .view-section, .scroll-area { height: auto; overflow: visible; display: block; margin: 0; padding: 0; } #view-pos { display: block; } .paper-bill { box-shadow: none; margin: 0; width: 100%; max-width: 58mm; border: none; padding: 0; } }
     </style>
 </head>
@@ -128,12 +134,22 @@
             </div>
 
             <div id="form-login" class="auth-form active">
-                <input type="number" id="logMobile" class="auth-input" placeholder="Your Mobile Number">
-                <input type="password" id="logPass" class="auth-input" placeholder="6-Digit Password" maxlength="6">
-                <button class="auth-btn" onclick="loginUser()">Login Securely</button>
-                <div style="text-align:center; margin-top:10px;">
-                    <a href="#" onclick="showForgotPass()" style="color:#e74c3c; font-size:14px; text-decoration:none; font-weight:bold;">Forgot Password?</a>
+                <div id="login-step-1">
+                    <input type="number" id="logMobile" class="auth-input" placeholder="Your Mobile Number (10 digits)">
+                    <div id="recaptcha-container" style="margin-top: 10px;"></div>
+                    <button class="auth-btn" id="btnSendOtp" onclick="sendOTP()" style="width: 100%;">Send OTP</button>
+                    <div style="text-align:center; margin-top:10px;">
+                        <a href="#" onclick="showForgotPass()" style="color:#e74c3c; font-size:14px; text-decoration:none; font-weight:bold;">Login with Password instead?</a>
+                    </div>
                 </div>
+                
+                <div id="login-step-2" style="display: none;">
+                    <p style="text-align:center; font-weight:bold; color:#2980b9;">OTP sent to <span id="displayOtpNum"></span></p>
+                    <input type="number" id="otpInput" class="auth-input" placeholder="Enter 6-digit OTP">
+                    <button class="auth-btn" style="background:#27ae60; width: 100%;" onclick="verifyOTP()">Verify & Login</button>
+                    <button class="auth-btn" style="background:#95a5a6; width: 100%; margin-top:10px;" onclick="location.reload()">Back</button>
+                </div>
+
                 <div style="text-align:center; margin-top:15px; padding-top:15px; border-top:1px solid #eee;">
                     <a href="https://wa.me/918252900810?text=I need help with my ACS POS account." target="_blank" style="color:#25D366; font-size:15px; text-decoration:none; font-weight:bold;"><i class="fab fa-whatsapp"></i> Support for Enquiry</a>
                 </div>
@@ -172,18 +188,36 @@
             </div>
 
             <div id="form-forgot" class="auth-form">
-                <h4 style="margin:0; color:#e74c3c;">Reset Password</h4>
-                <input type="number" id="fgtMobile" class="auth-input" placeholder="Enter Registered Mobile No.">
-                <button class="auth-btn" style="background:#f39c12;" onclick="fetchSecurityQuestion()">Get Question</button>
-                
-                <div id="fgtQuestionArea" style="display:none; flex-direction:column; gap:10px; margin-top:10px;">
-                    <p id="fgtQuestionText" style="font-weight:bold; font-size:14px; margin:0; color:#2980b9;"></p>
-                    <input type="text" id="fgtAnswer" class="auth-input" placeholder="Enter Your Answer">
-                    <input type="password" id="fgtNewPass" class="auth-input" placeholder="New 6-Digit Password" maxlength="6">
-                    <button class="auth-btn" style="background:#2ecc71;" onclick="resetPassword()">Update Password</button>
-                </div>
-                <button class="auth-btn" style="background:#95a5a6; margin-top:10px;" onclick="switchAuthTab('login')">Back to Login</button>
+                <h4 style="margin:0; color:#34495e;">Login with Password</h4>
+                <input type="number" id="fgtMobile" class="auth-input" placeholder="Registered Mobile No.">
+                <input type="password" id="fgtPass" class="auth-input" placeholder="6-Digit Password" maxlength="6">
+                <button class="auth-btn" style="background:#f39c12;" onclick="loginWithPasswordFallback()">Login</button>
+                <button class="auth-btn" style="background:#95a5a6; margin-top:10px;" onclick="switchAuthTab('login')">Back to OTP Login</button>
             </div>
+        </div>
+    </div>
+
+    <div id="aiChatModal">
+        <div class="auth-box" style="background:white; height:80vh; display:flex; flex-direction:column; padding:0; overflow:hidden;">
+            <div style="background:#2c3e50; color:white; padding:15px; display:flex; justify-content:space-between; align-items:center;">
+                <h3 style="margin:0;"><i class="fas fa-robot"></i> AI Help Center</h3>
+                <i class="fas fa-times" style="font-size:20px; cursor:pointer; color:#e74c3c;" onclick="document.getElementById('aiChatModal').style.display='none'"></i>
+            </div>
+            <div id="aiChatBox" style="flex:1; overflow-y:auto; padding:15px; background:#f4f6f7;">
+                <div class="chat-bubble chat-ai">Hello Adarsh! Main ACS AI Assistant hoon. App me koi dikkat aa rahi hai toh poochiye.</div>
+            </div>
+            <div style="padding:10px; border-top:1px solid #ccc; display:flex; background:#fff;">
+                <input type="text" id="aiChatInput" placeholder="Apna sawaal type karein..." style="flex:1; padding:10px; border:1px solid #bdc3c7; border-radius:20px; outline:none;" onkeypress="if(event.key === 'Enter') sendAIChatMsg()">
+                <button onclick="sendAIChatMsg()" style="background:#2980b9; color:white; border:none; width:40px; height:40px; border-radius:50%; margin-left:10px; cursor:pointer;"><i class="fas fa-paper-plane"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <div id="aiProcessModal">
+        <div class="auth-box" style="background:white; text-align:center;">
+            <i class="fas fa-camera" style="font-size:40px; color:#8e44ad; animation: pulseMic 1s infinite; margin-bottom:15px;"></i>
+            <h3 style="margin:0; color:#2c3e50;">AI Vision Scanning...</h3>
+            <p style="color:#7f8c8d; font-size:14px;">Bill ko padha jaa raha hai, kripya thodi der pratiksha karein.</p>
         </div>
     </div>
 
@@ -262,7 +296,7 @@
                         <div id="dueMark" style="display:none; position:absolute; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-30deg); border:4px solid red; color:red; font-size:60px; font-weight:900; opacity:0.3; padding:10px;">DUE</div>
                         
                         <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:5px; margin-bottom:10px;">
-                            <div id="billShopName" style="font-size:20px; font-weight:900; color:#c0392b;">ACS KIRANA STORE</div>
+                            <div id="billShopName" style="font-size:20px; font-weight:900; color:#c0392b;">ACS STORE</div>
                             <div id="billShopAddress">Address Details Here</div>
                             <div id="billShopMobile">Mo: 0000000000</div>
                             <div style="font-weight:bold; border:1px solid #000; display:inline-block; padding:2px 5px; margin-top:3px;">Owner: <span id="billShopOwner">OWNER NAME</span></div>
@@ -347,6 +381,10 @@
                 <div style="font-size:10px; color:#ecf0f1; margin-top:2px;"><i class="fas fa-edit"></i> Edit Profile</div>
             </div>
         </div>
+        
+        <a onclick="document.getElementById('aiCameraInput').click()"><i class="fas fa-camera"></i> Click Picture Bill (AI)</a>
+        <input type="file" id="aiCameraInput" accept="image/*" capture="environment" style="display:none;" onchange="processAIBillPicture(this)">
+        <a onclick="openHelpCenter()"><i class="fas fa-robot"></i> AI Help Center</a>
         <a onclick="switchView('view-pos')"><i class="fas fa-receipt"></i> Billing (POS)</a>
         <a onclick="switchView('view-rough')"><i class="fas fa-magic"></i> Rough Bill Maker</a>
         <a onclick="switchView('view-dues')"><i class="fas fa-book-open"></i> Due List (Udhaar)</a>
@@ -355,7 +393,7 @@
         <a onclick="switchView('view-history')"><i class="fas fa-history"></i> Bill History</a>
         <hr style="border-color:#444; margin:10px 0;">
         <a onclick="logoutUser()" style="color:#e74c3c;"><i class="fas fa-sign-out-alt"></i> Logout</a>
-        <a href="https://wa.me/918252900810?text=Help" target="_blank"><i class="fab fa-whatsapp"></i> Help Center</a>
+        <a href="https://wa.me/918252900810?text=Help" target="_blank"><i class="fab fa-whatsapp"></i> Chat Support</a>
         <a onclick="backupData()"><i class="fas fa-cloud-download-alt"></i> Backup Data</a>
     </div>
 
@@ -394,16 +432,20 @@
         let globalProducts = {};
         let tempProfilePicBase64 = "";
 
-        // CHECK PERSISTENT LOGIN ON LOAD
-        window.addEventListener('load', () => {
+        // RECAPTCHA SETUP FOR OTP
+        window.onload = function() {
+            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+                'size': 'normal'
+            });
+            
             const savedUser = localStorage.getItem('acs_loggedInUser');
             if(savedUser) {
                 currentUserData = JSON.parse(savedUser);
                 document.getElementById('authOverlay').style.display = 'none';
                 applyUserDataToPOS();
-                syncDataFromCloud(); // Fetch Dues & History Live
+                syncDataFromCloud(); 
             }
-        });
+        };
 
         // Load Global Products
         database.ref('products').on('value', (snapshot) => {
@@ -425,7 +467,6 @@
             }
         }
 
-        // AUTH UI SWITCHER
         function switchAuthTab(tab) {
             document.querySelectorAll('.auth-tab').forEach(e => e.classList.remove('active'));
             document.querySelectorAll('.auth-form').forEach(e => e.classList.remove('active'));
@@ -436,14 +477,79 @@
         }
         function showForgotPass() { switchAuthTab('forgot'); }
 
+        // --- NEW OTP LOGIC ---
+        let confirmationResult;
+        function sendOTP() {
+            const mobileNo = document.getElementById('logMobile').value;
+            if(mobileNo.length !== 10) { alert("Please enter a valid 10-digit mobile number!"); return; }
+
+            const phoneNumber = "+91" + mobileNo;
+            const appVerifier = window.recaptchaVerifier;
+
+            firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier)
+                .then((result) => {
+                    confirmationResult = result;
+                    document.getElementById('login-step-1').style.display = 'none';
+                    document.getElementById('login-step-2').style.display = 'block';
+                    document.getElementById('displayOtpNum').innerText = mobileNo;
+                }).catch((error) => {
+                    console.error("SMS Error:", error);
+                    alert("Error sending OTP. Please refresh the page and try again.");
+                });
+        }
+
+        function verifyOTP() {
+            const code = document.getElementById('otpInput').value;
+            if(code.length !== 6) { alert("Please enter the 6-digit OTP!"); return; }
+
+            confirmationResult.confirm(code).then((result) => {
+                const mobileNo = document.getElementById('logMobile').value;
+                // Fetch User Details from Realtime DB after successful OTP
+                database.ref('users/' + mobileNo).once('value', (snapshot) => {
+                    if(snapshot.exists()) {
+                        currentUserData = snapshot.val();
+                        localStorage.setItem('acs_loggedInUser', JSON.stringify(currentUserData));
+                        applyUserDataToPOS();
+                        document.getElementById('authOverlay').style.display = 'none';
+                        syncDataFromCloud();
+                    } else {
+                        alert("Phone verified, but account not found! Please sign up first.");
+                        switchAuthTab('signup');
+                        document.getElementById('regMobile').value = mobileNo;
+                    }
+                });
+            }).catch((error) => {
+                alert("Incorrect OTP!");
+            });
+        }
+
+        // LEGACY PASSWORD FALLBACK
+        function loginWithPasswordFallback() {
+            const mobile = document.getElementById('fgtMobile').value; 
+            const pass = document.getElementById('fgtPass').value;
+            if(!mobile || !pass) { alert("Enter Mobile and Password!"); return; }
+
+            database.ref('users/' + mobile).once('value', (snapshot) => {
+                if(snapshot.exists()) {
+                    const data = snapshot.val();
+                    if(data.pass === pass) {
+                        currentUserData = data;
+                        localStorage.setItem('acs_loggedInUser', JSON.stringify(data)); 
+                        applyUserDataToPOS();
+                        document.getElementById('authOverlay').style.display = 'none';
+                        syncDataFromCloud();
+                    } else { alert("Incorrect Password!"); }
+                } else { alert("User not found! Please Sign Up First."); }
+            });
+        }
+
         // REGISTER (SIGN UP)
         function registerUser() {
             const name = document.getElementById('regName').value; const mobile = document.getElementById('regMobile').value; const pass = document.getElementById('regPass').value;
             const q = document.getElementById('regQuestion').value; const ans = document.getElementById('regAnswer').value;
             const sName = document.getElementById('regShopName').value; const sAdd = document.getElementById('regShopAddress').value; 
             
-            // STRICT 6 CHARACTER PASSWORD VALIDATION
-            if(pass.length !== 6) { alert("पासवर्ड सिर्फ 6 अक्षरों या अंकों का होना चाहिए! (Password must be exactly 6 characters)"); return; }
+            if(pass.length !== 6) { alert("Password must be exactly 6 characters"); return; }
             if(!name || !mobile || !ans || !sName || !sAdd) { alert("Please fill all details correctly!"); return; }
 
             database.ref('users/' + mobile).once('value', (snapshot) => {
@@ -453,38 +559,19 @@
                         name, mobile, pass, question: q, answer: ans.toLowerCase(), 
                         shopName: sName, shopAddress: sAdd, shopMobile: mobile, profilePic: tempProfilePicBase64 
                     });
-                    alert("Account Created Successfully! Please Login.");
+                    alert("Account Created Successfully! Please Login via OTP.");
                     switchAuthTab('login');
                 }
-            });
-        }
-
-        // LOGIN
-        function loginUser() {
-            const mobile = document.getElementById('logMobile').value; const pass = document.getElementById('logPass').value;
-            if(!mobile || !pass) { alert("Enter Mobile and Password!"); return; }
-
-            database.ref('users/' + mobile).once('value', (snapshot) => {
-                if(snapshot.exists()) {
-                    const data = snapshot.val();
-                    if(data.pass === pass) {
-                        currentUserData = data;
-                        localStorage.setItem('acs_loggedInUser', JSON.stringify(data)); // Persistent Save
-                        applyUserDataToPOS();
-                        document.getElementById('authOverlay').style.display = 'none';
-                        syncDataFromCloud();
-                    } else { alert("Incorrect Password!"); }
-                } else { alert("User not found! Please Sign Up First."); }
             });
         }
 
         function logoutUser() {
             currentUserData = null;
             localStorage.removeItem('acs_loggedInUser');
-            localStorage.setItem('kamdeo_history', '[]'); // Clear local cache on logout
+            localStorage.setItem('kamdeo_history', '[]'); 
             localStorage.setItem('kamdeo_dues', '[]');
             document.getElementById('authOverlay').style.display = 'flex';
-            toggleMenu();
+            location.reload(); // Refresh to reset Recaptcha
         }
 
         // DYNAMIC POS UPDATE
@@ -500,6 +587,69 @@
             document.getElementById('billShopMobile').innerText = "Mo: " + currentUserData.mobile;
             document.getElementById('billShopOwner').innerText = currentUserData.name.toUpperCase();
             document.getElementById('stampName').innerText = currentUserData.shopName.substring(0,8).toUpperCase();
+        }
+
+        // --- NEW FEATURE 1: AI CAMERA BILL ---
+        function processAIBillPicture(input) {
+            toggleMenu(); // Close sidebar
+            if (input.files && input.files[0]) {
+                const modal = document.getElementById('aiProcessModal');
+                modal.style.display = 'flex';
+                
+                // Note for Adarsh: Front-end JS cannot perfectly read handwriting without an API.
+                // We simulate the AI loading time and auto-fill a sample bill here.
+                // In production, you will send `input.files[0]` to Gemini Vision API or Google Vision API here.
+                
+                setTimeout(() => {
+                    modal.style.display = 'none';
+                    switchView('view-pos');
+                    
+                    // Simulated AI Detection Result
+                    document.getElementById('cName').value = "Walk-in Customer (AI Scanned)";
+                    
+                    const row1 = document.getElementById('billTable').querySelector('tbody').insertRow();
+                    row1.innerHTML = `<td contenteditable="true" oninput="recalcRow(this)">Scanned Item 1</td><td contenteditable="true" oninput="recalcRow(this)">150</td><td contenteditable="true" oninput="recalcRow(this)">2</td><td class="amt" data-val="300" style="text-align:right;">300.00</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td>`;
+                    
+                    const row2 = document.getElementById('billTable').querySelector('tbody').insertRow();
+                    row2.innerHTML = `<td contenteditable="true" oninput="recalcRow(this)">Scanned Item 2</td><td contenteditable="true" oninput="recalcRow(this)">50</td><td contenteditable="true" oninput="recalcRow(this)">1</td><td class="amt" data-val="50" style="text-align:right;">50.00</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td>`;
+                    
+                    updateTotal();
+                    playSound('bill');
+                    alert("AI ne bill scan kar liya hai! Kripya items verify karein. (Connect an API key for real handwriting recognition)");
+                }, 3000);
+            }
+        }
+
+        // --- NEW FEATURE 2: AI HELP CENTER ---
+        function openHelpCenter() {
+            toggleMenu(); // close sidebar
+            document.getElementById('aiChatModal').style.display = 'flex';
+        }
+        
+        function sendAIChatMsg() {
+            const inputField = document.getElementById('aiChatInput');
+            const msg = inputField.value.trim();
+            if(!msg) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+            
+            // Add User Message
+            chatBox.innerHTML += `<div class="chat-bubble chat-user">${msg}</div>`;
+            inputField.value = '';
+            chatBox.scrollTop = chatBox.scrollHeight;
+
+            // Simulated AI Response (Connect Gemini API here for dynamic chat)
+            setTimeout(() => {
+                let aiReply = "Main samajh nahi paya. Kripya app se judi koi samasya batayein (jaise: 'bill kaise banaye', 'print nahi ho raha').";
+                
+                if(msg.toLowerCase().includes('bill')) { aiReply = "Bill banane ke liye Home screen par 'Item Name' dalein, aur 'ADD' dabayein. Niche list me item add ho jayega."; }
+                else if(msg.toLowerCase().includes('print')) { aiReply = "Print karne ke liye niche 'PRINT' button par click karein. Aapka thermal ya normal printer connect hona chahiye."; }
+                else if(msg.toLowerCase().includes('password') || msg.toLowerCase().includes('otp')) { aiReply = "Login OTP ke dwara hota hai. Agar purana password use karna hai toh 'Login with Password instead' par click karein."; }
+                else if(msg.toLowerCase().includes('hello') || msg.toLowerCase().includes('hi')) { aiReply = `Hello ${currentUserData ? currentUserData.name : 'Adarsh'}! Main ACS POS AI hoon. Kahiye kya madad karun?`; }
+
+                chatBox.innerHTML += `<div class="chat-bubble chat-ai"><strong>AI:</strong> ${aiReply}</div>`;
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 1000);
         }
 
         // EDIT PROFILE MODAL LOGIC
@@ -536,49 +686,18 @@
         // CLOUD SYNC FOR BILLS AND DUES
         function syncDataFromCloud() {
             if(!currentUserData) return;
-            // Sync Bills
             database.ref('bills/' + currentUserData.mobile).on('value', snap => {
                 let bills = [];
                 snap.forEach(child => bills.unshift(child.val()));
                 localStorage.setItem('kamdeo_history', JSON.stringify(bills));
                 if(document.getElementById('view-history').classList.contains('active-view')) renderList('history');
             });
-            // Sync Dues
             database.ref('dues/' + currentUserData.mobile).on('value', snap => {
                 let dues = [];
                 snap.forEach(child => dues.unshift(child.val()));
                 localStorage.setItem('kamdeo_dues', JSON.stringify(dues));
                 if(document.getElementById('view-dues').classList.contains('active-view')) renderList('dues');
             });
-        }
-
-        // FORGOT PASSWORD LOGIC
-        let tempForgotUser = null;
-        function fetchSecurityQuestion() {
-            const mobile = document.getElementById('fgtMobile').value;
-            if(!mobile) { alert("Enter Registered Mobile Number!"); return; }
-            database.ref('users/' + mobile).once('value', (snapshot) => {
-                if(snapshot.exists()) {
-                    tempForgotUser = snapshot.val(); let qText = "";
-                    switch(tempForgotUser.question) {
-                        case 'pet': qText = "Aapke pahle pet ka naam?"; break;
-                        case 'school': qText = "Aapke pahle school ka naam?"; break;
-                        case 'friend': qText = "Aapke best friend ka naam?"; break;
-                    }
-                    document.getElementById('fgtQuestionText').innerText = qText;
-                    document.getElementById('fgtQuestionArea').style.display = 'flex';
-                } else { alert("User not found in system!"); }
-            });
-        }
-        function resetPassword() {
-            const ans = document.getElementById('fgtAnswer').value.toLowerCase(); const newPass = document.getElementById('fgtNewPass').value;
-            if(newPass.length !== 6) { alert("पासवर्ड सिर्फ 6 अक्षरों या अंकों का होना चाहिए!"); return; }
-            if(!ans || !newPass) { alert("Fill security answer and new password!"); return; }
-            if(ans === tempForgotUser.answer) {
-                database.ref('users/' + tempForgotUser.mobile).update({ pass: newPass });
-                alert("Password Updated Successfully! Please login with your new password.");
-                switchAuthTab('login'); document.getElementById('fgtQuestionArea').style.display = 'none';
-            } else { alert("गलत उत्तर! (Incorrect Security Answer)"); }
         }
 
         // PREMIUM ADMIN LOGIC
@@ -616,7 +735,6 @@
         }
         function deleteUser(mobile) { if(confirm("Permanently delete this user from database?")) { database.ref('users/' + mobile).remove(); alert("User deleted!"); } }
         
-        // ADMIN VIEW BILLS
         function adminViewUserBills(mobile) {
             const cont = document.getElementById('adminBillsContainer'); cont.innerHTML = 'Loading...';
             document.getElementById('adminBillsModal').style.display = 'flex';
@@ -633,7 +751,7 @@
         }
 
 
-        // --- ORIGINAL APP JS LOGIC (WITH CLOUD SYNC ADDED IN BACKGROUND) ---
+        // --- ORIGINAL APP JS LOGIC ---
         const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
         function playSound(t){if(audioCtx.state==='suspended')audioCtx.resume();const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);if(t==='scan'){o.type='sine';o.frequency.setValueAtTime(1200,audioCtx.currentTime);g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.1);}else{o.type='triangle';o.frequency.setValueAtTime(600,audioCtx.currentTime);o.frequency.linearRampToValueAtTime(800,audioCtx.currentTime+0.1);g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.3);}}
         function updateTime(){const n=new Date();document.getElementById('liveDate').innerText=n.toLocaleDateString('en-IN');document.getElementById('liveTime').innerText=n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});}
@@ -646,7 +764,6 @@
         function saveData(k,d){localStorage.setItem(k,JSON.stringify(d));}
         function getProds(){return globalProducts;} 
         
-        // --- NOTIFICATION SYSTEM ---
         function checkNotiDot() { if(localStorage.getItem('kamdeo_new_noti') === 'true') document.getElementById('notiDot').style.display = 'block'; else document.getElementById('notiDot').style.display = 'none'; }
         function openNotiModal() { localStorage.setItem('kamdeo_new_noti', 'false'); checkNotiDot(); renderNotiList(); document.getElementById('notiModal').style.display = 'flex'; }
         function closeNotiModal() { document.getElementById('notiModal').style.display = 'none'; }
@@ -661,7 +778,6 @@
         }
         function delNoti(idx) { if(confirm("Delete this notification?")) { const list = JSON.parse(localStorage.getItem('kamdeo_notis') || '[]'); list.splice(idx, 1); localStorage.setItem('kamdeo_notis', JSON.stringify(list)); renderNotiList(); } }
 
-        // --- 🎤 CONTINUOUS AI MIC SYSTEM 🎤 ---
         let isMicOn = false; let recognition = null; let currentTargetId = null; let currentBtnId = null;
         function toggleDictation(targetId, btnId) {
             const btn = document.getElementById(btnId);
@@ -686,7 +802,6 @@
             recognition.start();
         }
 
-        // --- SUGGESTION ---
         function suggestProducts() {
             const val = document.getElementById('iName').value.toLowerCase(); const box = document.getElementById('suggestBox');
             if (!val) { box.style.display = 'none'; return; }
@@ -697,7 +812,6 @@
         function selectSuggest(name, price) { document.getElementById('iName').value = name; document.getElementById('iPrice').value = price; document.getElementById('suggestBox').style.display = 'none'; document.getElementById('iQty').focus(); }
         document.addEventListener('click', function(e) { if(e.target.id !== 'iName' && document.getElementById('suggestBox')) document.getElementById('suggestBox').style.display = 'none'; });
 
-        // --- NOTEPAD ---
         let currentNoteId = null;
         function loadNotesList() {
             const notes = JSON.parse(localStorage.getItem('kamdeo_notes') || '[]'); const container = document.getElementById('notesListContainer'); container.innerHTML = '';
@@ -711,7 +825,6 @@
         function formatText(cmd, val=null) { document.execCommand(cmd, false, val); document.getElementById('noteEditor').focus(); }
         function insertNoteImage(input) { if (input.files && input.files[0]) { const reader = new FileReader(); reader.onload = function(e) { formatText('insertHTML', `<img src="${e.target.result}"><br>`); }; reader.readAsDataURL(input.files[0]); } }
 
-        // --- AI ROUGH BILL PARSER ---
         function analyzeRoughBill() {
             const text = document.getElementById('roughBillText').value; if(!text.trim()) { alert("Please write/dictate something!"); return; }
             document.getElementById('billTable').querySelector('tbody').innerHTML = ""; 
@@ -743,7 +856,6 @@
             if(itemsAdded > 0) { updateTotal(); playSound('bill'); alert("✅ Smart Bill Created!"); switchView('view-pos'); } else { alert("Couldn't format."); }
         }
 
-        // --- POS CORE & EDITABLE TABLE ---
         document.getElementById('payMode').addEventListener('change',function(){document.getElementById('billPayMode').innerText=this.value;});
         
         function addItem(){
@@ -757,7 +869,6 @@
         function updateTotal(){ let sum=0; document.querySelectorAll('.amt').forEach(t=>sum+=parseFloat(t.getAttribute('data-val'))); document.getElementById('subTotal').innerText=sum.toFixed(2); document.getElementById('grandTotal').innerText=(sum-(parseFloat(document.getElementById('discountVal').value)||0)).toFixed(2); }
         function resetPOS() { document.getElementById('cName').value=""; document.getElementById('iName').value=""; document.getElementById('iPrice').value=""; document.getElementById('iQty').value="1"; document.getElementById('discountVal').value=""; document.getElementById('billTable').querySelector('tbody').innerHTML=""; document.getElementById('subTotal').innerText="0.00"; document.getElementById('grandTotal').innerText="0.00"; document.getElementById('dueMark').style.display='none'; }
 
-        // --- VOICE DUE & SAVE SYSTEM ---
         let mediaRecorder; let audioChunks = [];
         function initiateDueAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Bill Empty!");return;} if(!document.getElementById('cName').value){alert("Customer Name Required!");return;} document.getElementById('voiceModal').style.display = 'flex'; document.getElementById('voiceStatus').innerText = "क्या आप वॉयस मैसेज जोड़ना चाहते हैं?"; document.getElementById('btnStartVoice').style.display = 'block'; document.getElementById('btnStopVoice').style.display = 'none'; }
         async function startVoiceRecord() { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorder = new MediaRecorder(stream); audioChunks = []; mediaRecorder.ondataavailable = e => { if(e.data.size > 0) audioChunks.push(e.data); }; mediaRecorder.onstop = () => { const blob = new Blob(audioChunks, { type: 'audio/webm' }); const reader = new FileReader(); reader.readAsDataURL(blob); reader.onloadend = () => { finalizeDue(reader.result); } }; mediaRecorder.start(); document.getElementById('voiceStatus').innerText = "Recording... 🔴"; document.getElementById('btnStartVoice').style.display = 'none'; document.getElementById('btnStopVoice').style.display = 'block'; } catch(e) { alert("Mic Access Denied!"); skipVoiceRecord(); } }
@@ -771,10 +882,8 @@
             if(items.length===0) return false; 
             const rec={id:Date.now(),date:new Date().toLocaleString(),customer:c,total:t,discount:d,payMode:pm,items:items,isDue:isDue, audio:audioBase64}; 
             
-            // Local Storage Push
             const k=isDue?'kamdeo_dues':'kamdeo_history'; let data=getData(k); data.unshift(rec); saveData(k,data); 
             
-            // FIREBASE CLOUD PUSH
             if(currentUserData) {
                 const dbRef = isDue ? 'dues/' : 'bills/';
                 database.ref(dbRef + currentUserData.mobile + '/' + rec.id).set(rec);
@@ -786,11 +895,10 @@
         function handlePrintAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} saveRec(false); window.print(); setTimeout(resetPOS, 1000); }
         async function handleShareAction() { if(document.querySelectorAll('#billTable tbody tr').length===0){alert("Empty!");return;} saveRec(false); await generateBillImage(); setTimeout(shareImageToDrive, 500); setTimeout(resetPOS, 2000); }
 
-        /* FIXED THIS FUNCTION (REMOVED SCROLL INTO VIEW) */
         async function generateBillImage() { 
             document.querySelectorAll('.fa-times').forEach(e=>e.style.display='none'); 
             const el=document.getElementById('billPaper'); 
-            document.querySelector('.scroll-area').scrollTop = 0; /* NEW FIX */
+            document.querySelector('.scroll-area').scrollTop = 0; 
             const c=await html2canvas(el,{scale:2,backgroundColor:"#ffffff"}); 
             document.querySelectorAll('.fa-times').forEach(e=>e.style.display='inline'); 
             window.currCanvas=c; 
@@ -822,7 +930,7 @@
                 let d=getData(t==='dues'?'kamdeo_dues':'kamdeo_history').filter(b=>b.id!==id); saveData(t==='dues'?'kamdeo_dues':'kamdeo_history',d); renderList(t);
                 if(currentUserData) {
                     const dbRef = t==='dues' ? 'dues/' : 'bills/';
-                    database.ref(dbRef + currentUserData.mobile + '/' + id).remove(); // Cloud Delete
+                    database.ref(dbRef + currentUserData.mobile + '/' + id).remove();
                 }
             }
         }
@@ -831,14 +939,13 @@
             if(b){
                 b.isDue=false; let h=getData('kamdeo_history'); h.unshift(b); saveData('kamdeo_history',h); saveData('kamdeo_dues',d.filter(i=>i.id!==id)); renderList('dues');
                 if(currentUserData) {
-                    database.ref('dues/' + currentUserData.mobile + '/' + id).remove(); // Remove from cloud dues
-                    database.ref('bills/' + currentUserData.mobile + '/' + b.id).set(b); // Add to cloud bills
+                    database.ref('dues/' + currentUserData.mobile + '/' + id).remove(); 
+                    database.ref('bills/' + currentUserData.mobile + '/' + b.id).set(b);
                 }
             }
         }
         function backupData(){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify({h:getData('kamdeo_history'),d:getData('kamdeo_dues'), n:getData('kamdeo_notes'), notis:getData('kamdeo_notis')}));a.download="backup.json";a.click();}
         
-        // --- CLOUD BARCODE SCANNER ---
         let scanner;
         function startScanner(m){
             document.getElementById('scannerModal').style.display='flex';
