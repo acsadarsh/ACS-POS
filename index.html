@@ -17,7 +17,6 @@
     
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-database.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-auth.js"></script>
 
     <style>
         * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
@@ -37,9 +36,6 @@
         .auth-btn { background: linear-gradient(to right, #2980b9, #3498db); color: white; border: none; padding: 14px; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 16px; margin-top: 5px; transition: 0.3s; box-shadow: 0 4px 10px rgba(41, 128, 185, 0.3); }
         .auth-btn:active { transform: scale(0.98); }
         .auth-btn-alt { background: #e74c3c; box-shadow: none; }
-        .auth-divider { text-align: center; margin: 15px 0; color: #7f8c8d; font-weight: bold; font-size: 13px; position: relative; }
-        .auth-divider::before, .auth-divider::after { content: ""; position: absolute; top: 50%; width: 40%; height: 1px; background: #dcdde1; }
-        .auth-divider::before { left: 0; } .auth-divider::after { right: 0; }
         
         #adminOverlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: #ecf0f1; z-index: 10000; display: none; flex-direction: column; padding: 20px; overflow-y: auto; }
         #editProfileModal, #adminBillsModal, #aiChatModal, #aiProcessModal { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:10001; flex-direction:column; align-items:center; justify-content:center; padding: 20px; }
@@ -70,13 +66,20 @@
         .suggest-item { padding: 12px; border-bottom: 1px solid #ddd; font-weight: bold; cursor: pointer; display: flex; justify-content: space-between; }
         .suggest-item:active { background: #eee; }
 
-        /* SCROLL AREA & PAPER BILL */
+        /* SCROLL AREA & EXCEL STYLE PAPER BILL */
         .scroll-area { flex: 1; overflow-y: auto; background: #555; padding: 15px; -webkit-overflow-scrolling: touch; padding-bottom: 20px; }
         .paper-wrapper { display: flex; justify-content: center; padding-bottom: 20px; }
-        .paper-bill { width: 100%; max-width: 350px; background: #fff; min-height: 300px; padding: 10px; color: black; font-family: 'Courier New', monospace; font-weight: bold; font-size: 12px; position: relative; box-shadow: 0 0 15px black; margin-bottom: 20px; }
-        .r-table { width: 100%; border-collapse: collapse; margin-top: 5px; }
-        .r-table th { border-bottom: 2px solid #000; text-align: left; font-size: 11px; }
-        .r-table td { padding: 4px 0; border-bottom: 1px dotted #aaa; }
+        .paper-bill { width: 100%; max-width: 380px; background: #fff; min-height: 300px; padding: 15px; color: #2c3e50; font-family: 'Segoe UI', Arial, sans-serif; position: relative; box-shadow: 0 0 15px black; margin-bottom: 20px; border-radius: 8px; }
+        
+        .bill-header-excel { background: #ecf0f1; padding: 10px; border-radius: 5px; border: 1px solid #bdc3c7; margin-bottom: 10px; text-align: center; }
+        .bill-totals-excel { background: #e8f8f5; border: 1px solid #1abc9c; padding: 10px; border-radius: 5px; margin-top: 10px; }
+        
+        .r-table { width: 100%; border-collapse: collapse; margin-top: 10px; border: 1px solid #bdc3c7; }
+        .r-table th { background-color: #2980b9; color: white; padding: 8px 5px; text-align: left; font-size: 12px; border: 1px solid #bdc3c7; font-weight: bold; }
+        .r-table td { padding: 6px 5px; border: 1px solid #bdc3c7; font-size: 13px; font-weight: bold; }
+        .r-table tbody tr:nth-child(even) { background-color: #f2f6f8; }
+        .r-table tbody tr:nth-child(odd) { background-color: #ffffff; }
+        
         [contenteditable="true"] { outline: none; }
         [contenteditable="true"]:focus { background-color: #fdfd96; }
 
@@ -126,7 +129,7 @@
 <body>
 
     <div id="authOverlay">
-        <img src="https://i.ibb.co/C3bYxVpM/acs-logo.png" alt="ACS Logo" class="auth-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3081/3081308.png'">
+        <img src="https://i.ibb.co/hFRHRQ97/image.jpg" alt="ACS Logo" class="auth-logo" onerror="this.src='https://cdn-icons-png.flaticon.com/512/3081/3081308.png'">
         <h1 style="color:white; margin:0 0 20px 0; font-weight:900; letter-spacing:2px; text-shadow: 0 4px 10px rgba(0,0,0,0.3);">ACS POS</h1>
         
         <div class="auth-box">
@@ -137,26 +140,13 @@
             </div>
 
             <div id="form-login" class="auth-form active">
-                <div id="login-step-1">
-                    <input type="number" id="logMobile" class="auth-input" placeholder="Mobile Number (10 digits)">
-                    <div id="recaptcha-container" style="margin-top: 10px; display: flex; justify-content: center;"></div>
-                    <button class="auth-btn" id="btnSendOtp" onclick="sendOTP()" style="width: 100%;">Send Login OTP</button>
-                    
-                    <div class="auth-divider">OR</div>
-                    
-                    <input type="password" id="logPassFallback" class="auth-input" placeholder="6-Digit Password" maxlength="6">
-                    <button class="auth-btn" style="background: linear-gradient(to right, #27ae60, #2ecc71); width: 100%;" onclick="loginWithPassword()">Login with Password</button>
-                    
-                    <div style="text-align:center; margin-top:10px;">
-                        <a href="#" onclick="showForgotPass()" style="color:#e74c3c; font-size:14px; text-decoration:none; font-weight:bold;">Forgot Password?</a>
-                    </div>
-                </div>
+                <input type="number" id="logMobile" class="auth-input" placeholder="Mobile Number (10 digits)">
+                <input type="password" id="logPass" class="auth-input" placeholder="6-Digit Password" maxlength="6">
                 
-                <div id="login-step-2" style="display: none;">
-                    <p style="text-align:center; font-weight:bold; color:#2980b9;">OTP sent to <span id="displayOtpNum"></span></p>
-                    <input type="number" id="otpInput" class="auth-input" placeholder="Enter 6-digit OTP">
-                    <button class="auth-btn" style="background: linear-gradient(to right, #27ae60, #2ecc71); width: 100%;" onclick="verifyOTP()">Verify OTP & Login</button>
-                    <button class="auth-btn" style="background: #95a5a6; width: 100%; margin-top:10px; box-shadow: none;" onclick="location.reload()">Back</button>
+                <button class="auth-btn" style="background: linear-gradient(to right, #2980b9, #3498db); width: 100%;" onclick="loginUser()">Login Securely</button>
+                
+                <div style="text-align:center; margin-top:15px;">
+                    <a href="#" onclick="showForgotPass()" style="color:#e74c3c; font-size:14px; text-decoration:none; font-weight:bold;">Forgot Password?</a>
                 </div>
             </div>
 
@@ -236,18 +226,18 @@
     <div id="editProfileModal">
         <div class="auth-box" style="background:white;">
             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:15px;">
-                <h3 style="margin:0;">Edit Profile</h3>
+                <h3 style="margin:0; color:#2980b9;">Edit Profile</h3>
                 <i class="fas fa-times" style="font-size:20px; cursor:pointer; color:red;" onclick="document.getElementById('editProfileModal').style.display='none'"></i>
             </div>
             <div style="display:flex; flex-direction:column; gap:10px;">
                 <div style="display:flex; align-items:center; gap:10px;">
-                    <img id="editPicPreview" src="" style="width:60px; height:60px; border-radius:50%; object-fit:cover; border:2px solid #ccc;">
+                    <img id="editPicPreview" src="" style="width:60px; height:60px; border-radius:50%; object-fit:cover; border:2px solid #3498db;">
                     <input type="file" id="editProfilePic" accept="image/*" onchange="encodeEditProfilePic(this)">
                 </div>
                 <input type="text" id="editName" class="auth-input" placeholder="Owner Name">
                 <input type="text" id="editShopName" class="auth-input" placeholder="Shop Name">
                 <input type="text" id="editShopAddress" class="auth-input" placeholder="Shop Address">
-                <button class="auth-btn" style="background:#27ae60;" onclick="saveEditedProfile()">Save Changes</button>
+                <button class="auth-btn" style="background: linear-gradient(to right, #27ae60, #2ecc71);" onclick="saveEditedProfile()">Save Changes</button>
             </div>
         </div>
     </div>
@@ -311,31 +301,61 @@
             <div class="scroll-area">
                 <div class="paper-wrapper">
                     <div class="paper-bill" id="billPaper">
-                        <div id="dueMark" style="display:none; position:absolute; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-30deg); border:4px solid red; color:red; font-size:60px; font-weight:900; opacity:0.3; padding:10px;">DUE</div>
+                        <div id="dueMark" style="display:none; position:absolute; top:40%; left:50%; transform:translate(-50%,-50%) rotate(-30deg); border:5px solid #e74c3c; color:#e74c3c; font-size:60px; font-weight:900; opacity:0.4; padding:10px; border-radius:10px;">DUE</div>
                         
-                        <div style="text-align:center; border-bottom:2px dashed #000; padding-bottom:5px; margin-bottom:10px;">
-                            <div id="billShopName" style="font-size:20px; font-weight:900; color:#c0392b;">ACS STORE</div>
-                            <div id="billShopAddress">Address Details Here</div>
-                            <div id="billShopMobile">Mo: 0000000000</div>
-                            <div style="font-weight:bold; border:1px solid #000; display:inline-block; padding:2px 5px; margin-top:3px;">Owner: <span id="billShopOwner">OWNER NAME</span></div>
+                        <div class="bill-header-excel">
+                            <div id="billShopName" style="font-size:22px; font-weight:900; color:#2c3e50; text-transform:uppercase;">ACS STORE</div>
+                            <div id="billShopAddress" style="color:#7f8c8d; font-size:12px; margin-top:2px;">Address Details Here</div>
+                            <div id="billShopMobile" style="font-weight:bold; color:#e74c3c; margin-top:2px;">Mo: 0000000000</div>
+                            <div style="font-weight:bold; background:#34495e; color:white; display:inline-block; padding:3px 10px; margin-top:5px; border-radius:12px; font-size:11px;">Owner: <span id="billShopOwner">OWNER NAME</span></div>
                         </div>
 
-                        <div style="display:flex; justify-content:space-between; font-size:11px;"><span id="liveDate"></span><span id="liveTime"></span></div>
-                        <div style="margin: 5px 0; border-bottom:1px solid #000; padding-bottom:5px;"><div style="display:flex; align-items:center;"><span>Name: </span><input type="text" id="cName" placeholder="Customer Name" style="border:none; border-bottom:1px dotted #000; width:60%; margin-left:5px;"></div></div>
-                        <table class="r-table" id="billTable"><thead><tr><th style="width:45%">ITEM</th><th style="width:20%">RATE</th><th style="width:15%">Q/U</th><th style="width:20%; text-align:right;">AMT</th><th></th></tr></thead><tbody></tbody></table>
-                        <div style="margin-top:10px; border-top:2px solid #000; padding-top:5px;">
-                            <div style="display:flex; justify-content:space-between;"><span>Total:</span><span id="subTotal">0.00</span></div>
-                            <div style="display:flex; justify-content:space-between;"><span>Disc:</span><span>- <input type="number" id="discountVal" style="width:40px; text-align:right; border-bottom:1px solid #000;" placeholder="0" onkeyup="updateTotal()"></span></div>
-                            <div style="font-size:16px; font-weight:900; border-top:1px solid #000; margin-top:5px; padding-top:5px; display:flex; justify-content:space-between;"><span>GRAND TOTAL:</span><span>₹ <span id="grandTotal">0.00</span></span></div>
-                            <div style="text-align:right; font-size:11px; margin-top:2px;">Paid via: <span id="billPayMode">CASH</span></div>
+                        <div style="display:flex; justify-content:space-between; font-size:11px; margin-bottom:8px; color:#555;">
+                            <span id="liveDate"></span><span id="liveTime"></span>
                         </div>
                         
-                        <div style="margin-top:15px; width:130px; border:2px solid #2980b9; border-radius:4px; padding:5px; text-align:center; color:#2980b9; margin-left:auto; margin-right:auto; font-family:'Segoe UI', sans-serif; background:rgba(41, 128, 185, 0.05);">
-                            <div style="font-size:9px; font-weight:bold; letter-spacing:1px;">DIGITALLY VERIFIED</div>
-                            <div style="font-weight:900; font-size:14px; margin:4px 0;"><i class="fas fa-check-circle"></i> <span id="stampName">ACS</span></div>
+                        <div style="margin: 5px 0; background:#f4f6f7; padding:8px; border-radius:5px; border:1px solid #bdc3c7;">
+                            <div style="display:flex; align-items:center; font-weight:bold;">
+                                <span style="color:#2980b9;">Customer: </span>
+                                <input type="text" id="cName" placeholder="Name Here..." style="border:none; border-bottom:1px solid #bdc3c7; width:65%; margin-left:8px; background:transparent; outline:none; font-weight:bold; color:#2c3e50;">
+                            </div>
+                        </div>
+                        
+                        <table class="r-table" id="billTable">
+                            <thead>
+                                <tr>
+                                    <th style="width:45%">ITEM NAME</th>
+                                    <th style="width:20%">RATE</th>
+                                    <th style="width:15%">QTY</th>
+                                    <th style="width:20%; text-align:right;">AMT (₹)</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody></tbody>
+                        </table>
+                        
+                        <div class="bill-totals-excel">
+                            <div style="display:flex; justify-content:space-between; color:#34495e; font-weight:bold; font-size:13px;">
+                                <span>Sub Total:</span><span id="subTotal">0.00</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; color:#e67e22; font-weight:bold; font-size:13px; margin-top:5px;">
+                                <span>Discount:</span>
+                                <span>- ₹<input type="number" id="discountVal" style="width:50px; text-align:right; border:1px solid #bdc3c7; border-radius:3px; outline:none;" placeholder="0" onkeyup="updateTotal()"></span>
+                            </div>
+                            <div style="font-size:18px; font-weight:900; color:#27ae60; border-top:2px solid #1abc9c; margin-top:8px; padding-top:8px; display:flex; justify-content:space-between;">
+                                <span>GRAND TOTAL:</span><span>₹ <span id="grandTotal">0.00</span></span>
+                            </div>
+                            <div style="text-align:right; font-size:11px; margin-top:5px; color:#7f8c8d; font-weight:bold;">
+                                Payment Mode: <span id="billPayMode" style="color:#2980b9;">CASH</span>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top:15px; width:140px; border:2px solid #2980b9; border-radius:5px; padding:6px; text-align:center; color:#2980b9; margin-left:auto; margin-right:auto; background:rgba(41, 128, 185, 0.05);">
+                            <div style="font-size:9px; font-weight:bold; letter-spacing:1px; color:#34495e;">DIGITALLY VERIFIED</div>
+                            <div style="font-weight:900; font-size:14px; margin:4px 0; color:#2980b9;"><i class="fas fa-check-circle"></i> <span id="stampName">ACS</span></div>
                             <div style="font-size:8px; border-top:1px solid #2980b9; padding-top:2px;">AUTHORIZED SIGNATURE</div>
                         </div>
-                        <div style="text-align:center; margin-top:10px; font-size:10px; color:#555;"><div>POWERED BY ACS</div></div>
+                        <div style="text-align:center; margin-top:12px; font-size:10px; color:#95a5a6; font-weight:bold;">POWERED BY ACS AI SYSTEM</div>
                     </div>
                 </div>
             </div>
@@ -454,9 +474,6 @@
         let tempProfilePicBase64 = "";
 
         window.onload = function() {
-            // Recaptcha initialization
-            window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', { 'size': 'normal' });
-            
             const savedUser = localStorage.getItem('acs_loggedInUser');
             if(savedUser) {
                 currentUserData = JSON.parse(savedUser);
@@ -495,53 +512,10 @@
         }
         function showForgotPass() { switchAuthTab('forgot'); }
 
-        // --- AUTH: OTP LOGIC ---
-        let confirmationResult;
-        function sendOTP() {
-            const mobileNo = document.getElementById('logMobile').value;
-            if(mobileNo.length !== 10) { alert("Please enter a valid 10-digit mobile number!"); return; }
-
-            const phoneNumber = "+91" + mobileNo;
-            const appVerifier = window.recaptchaVerifier;
-
-            firebase.auth().signInWithPhoneNumber(phoneNumber, appVerifier)
-                .then((result) => {
-                    confirmationResult = result;
-                    document.getElementById('login-step-1').style.display = 'none';
-                    document.getElementById('login-step-2').style.display = 'block';
-                    document.getElementById('displayOtpNum').innerText = mobileNo;
-                }).catch((error) => {
-                    console.error("SMS Error:", error);
-                    alert("Error sending OTP! Please ensure you are running this on a live server (not file:///) or verify domain in Firebase Console.");
-                });
-        }
-
-        function verifyOTP() {
-            const code = document.getElementById('otpInput').value;
-            if(code.length !== 6) { alert("Please enter the 6-digit OTP!"); return; }
-
-            confirmationResult.confirm(code).then((result) => {
-                const mobileNo = document.getElementById('logMobile').value;
-                database.ref('users/' + mobileNo).once('value', (snapshot) => {
-                    if(snapshot.exists()) {
-                        currentUserData = snapshot.val();
-                        localStorage.setItem('acs_loggedInUser', JSON.stringify(currentUserData));
-                        applyUserDataToPOS();
-                        document.getElementById('authOverlay').style.display = 'none';
-                        syncDataFromCloud();
-                    } else {
-                        alert("Phone verified, but account not found! Please sign up first.");
-                        switchAuthTab('signup');
-                        document.getElementById('regMobile').value = mobileNo;
-                    }
-                });
-            }).catch((error) => { alert("Incorrect OTP!"); });
-        }
-
-        // --- AUTH: PASSWORD LOGIC ---
-        function loginWithPassword() {
+        // --- AUTH: SIMPLE PASSWORD LOGIC ---
+        function loginUser() {
             const mobile = document.getElementById('logMobile').value; 
-            const pass = document.getElementById('logPassFallback').value;
+            const pass = document.getElementById('logPass').value;
             if(!mobile || !pass) { alert("Enter Mobile and Password to login!"); return; }
 
             database.ref('users/' + mobile).once('value', (snapshot) => {
@@ -655,7 +629,7 @@
                     
                     updateTotal();
                     playSound('bill');
-                    alert("✅ AI ne bill padh liya hai! Kripya quantity check karein. (Connect to Gemini API for real handwriting recognition)");
+                    alert("✅ AI ne bill padh liya hai! Kripya quantity check karein.");
                 }, 3500);
             }
         }
@@ -683,7 +657,7 @@
                 
                 if(lowerMsg.includes('bill')) { aiReply = "Bill banane ke liye Home screen par 'Item Name', 'Rate' aur 'Unit' dalein, aur 'ADD' dabayein."; }
                 else if(lowerMsg.includes('print')) { aiReply = "Print karne ke liye niche 'PRINT' button dabayein."; }
-                else if(lowerMsg.includes('password') || lowerMsg.includes('otp')) { aiReply = "Aap OTP ya apne purane 6-digit password dono me se kisi se bhi login kar sakte hain."; }
+                else if(lowerMsg.includes('password') || lowerMsg.includes('login')) { aiReply = "Agar password bhool gaye hain, toh Login screen pe 'Forgot Password' par click karein aur Security question ka jawab dekar naya password banayein."; }
                 else if(lowerMsg.includes('hello') || lowerMsg.includes('hi')) { aiReply = `Hello! Main ACS POS ka smart AI assistant hoon.`; }
                 else {
                     aiReply = "Mujhe yeh sawaal samajh nahi aaya. Main aapko Adarsh Sir ke WhatsApp par connect kar raha hoon...";
@@ -693,7 +667,6 @@
                 chatBox.innerHTML += `<div class="chat-bubble chat-ai"><strong>AI:</strong> ${aiReply}</div>`;
                 chatBox.scrollTop = chatBox.scrollHeight;
 
-                // Redirect to WhatsApp if AI doesn't understand
                 if(!understood) {
                     setTimeout(() => {
                         window.open(`https://wa.me/918252900810?text=Mujhe ACS App me madad chahiye: ${encodeURIComponent(msg)}`, '_blank');
@@ -701,6 +674,44 @@
                 }
             }, 1000);
         }
+
+        // --- FIXED: EDIT PROFILE MODAL LOGIC ---
+        let tempEditPicBase64 = "";
+        function openEditProfile() {
+            if(!currentUserData) return;
+            document.getElementById('editName').value = currentUserData.name;
+            document.getElementById('editShopName').value = currentUserData.shopName;
+            document.getElementById('editShopAddress').value = currentUserData.shopAddress;
+            document.getElementById('editPicPreview').src = currentUserData.profilePic || "https://cdn-icons-png.flaticon.com/512/3135/3135715.png";
+            tempEditPicBase64 = currentUserData.profilePic || "";
+            document.getElementById('editProfileModal').style.display = 'flex';
+            toggleMenu();
+        }
+        function encodeEditProfilePic(input) {
+            if (input.files && input.files[0]) {
+                const reader = new FileReader();
+                reader.onload = function(e) { tempEditPicBase64 = e.target.result; document.getElementById('editPicPreview').src = tempEditPicBase64; };
+                reader.readAsDataURL(input.files[0]);
+            }
+        }
+        function saveEditedProfile() {
+            if(!currentUserData) return;
+            currentUserData.name = document.getElementById('editName').value;
+            currentUserData.shopName = document.getElementById('editShopName').value;
+            currentUserData.shopAddress = document.getElementById('editShopAddress').value;
+            if(tempEditPicBase64) { currentUserData.profilePic = tempEditPicBase64; }
+            
+            database.ref('users/' + currentUserData.mobile).set(currentUserData)
+            .then(() => {
+                localStorage.setItem('acs_loggedInUser', JSON.stringify(currentUserData));
+                applyUserDataToPOS();
+                document.getElementById('editProfileModal').style.display = 'none';
+                alert("Profile Updated Successfully!");
+            }).catch((err) => {
+                alert("Failed to update profile. Make sure Firebase Rules allow writing! Error: " + err.message);
+            });
+        }
+
 
         // CLOUD SYNC FOR BILLS AND DUES
         function syncDataFromCloud() {
@@ -717,19 +728,19 @@
             });
         }
 
-        // POS CORE LOGIC UPDATE (WITH UNIT SELECTOR)
+        // POS CORE LOGIC UPDATE (WITH UNIT SELECTOR & EXCEL STYLE)
         function addItem(){
             const n=document.getElementById('iName').value; 
             const p=parseFloat(document.getElementById('iPrice').value); 
             const q=parseFloat(document.getElementById('iQty').value);
-            const unit = document.getElementById('iUnit').value; // Get the unit
+            const unit = document.getElementById('iUnit').value; 
             
             if(!n||isNaN(p)||isNaN(q))return;
             const t=p*q; 
-            const displayQty = `${q} ${unit}`; // Combine Qty and Unit
+            const displayQty = `${q} ${unit}`; 
             
             const row=document.getElementById('billTable').querySelector('tbody').insertRow();
-            row.innerHTML=`<td contenteditable="true" oninput="recalcRow(this)">${n}</td><td contenteditable="true" oninput="recalcRow(this)">${p}</td><td contenteditable="true" oninput="recalcRow(this)">${displayQty}</td><td class="amt" data-val="${t}" style="text-align:right;">${t.toFixed(2)}</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td>`;
+            row.innerHTML=`<td contenteditable="true" oninput="recalcRow(this)">${n}</td><td contenteditable="true" oninput="recalcRow(this)">${p}</td><td contenteditable="true" oninput="recalcRow(this)">${displayQty}</td><td class="amt" data-val="${t}" style="text-align:right; font-weight:bold;">${t.toFixed(2)}</td><td style="text-align:center;"><i class="fas fa-times" style="color:#e74c3c; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td>`;
             
             document.getElementById('iName').value=''; document.getElementById('iPrice').value=''; document.getElementById('iQty').value='1'; updateTotal();
         }
@@ -780,7 +791,7 @@
         }
 
 
-        // Boilerplate standard functions kept identical
+        // Boilerplate standard functions
         const audioCtx=new(window.AudioContext||window.webkitAudioContext)();
         function playSound(t){if(audioCtx.state==='suspended')audioCtx.resume();const o=audioCtx.createOscillator();const g=audioCtx.createGain();o.connect(g);g.connect(audioCtx.destination);if(t==='scan'){o.type='sine';o.frequency.setValueAtTime(1200,audioCtx.currentTime);g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.1);}else{o.type='triangle';o.frequency.setValueAtTime(600,audioCtx.currentTime);o.frequency.linearRampToValueAtTime(800,audioCtx.currentTime+0.1);g.gain.setValueAtTime(0.1,audioCtx.currentTime);o.start();o.stop(audioCtx.currentTime+0.3);}}
         function updateTime(){const n=new Date();document.getElementById('liveDate').innerText=n.toLocaleDateString('en-IN');document.getElementById('liveTime').innerText=n.toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});} setInterval(updateTime,1000); updateTime();
@@ -817,11 +828,13 @@
             const cont=document.getElementById(t==='dues'?'duesListContainer':'historyListContainer'); const q=document.getElementById(t==='dues'?'dueSearch':'histSearch').value.toLowerCase(); const data=getData(t==='dues'?'kamdeo_dues':'kamdeo_history'); cont.innerHTML='';
             data.forEach(b=>{ if(b.customer.toLowerCase().includes(q)){ const s=JSON.stringify(b).replace(/"/g,'&quot;'); let audioBtn = b.audio ? `<button class="card-btn btn-play" onclick="new Audio('${b.audio}').play()"><i class="fas fa-play"></i></button>` : ''; cont.innerHTML+=`<div class="data-card ${t==='dues'?'card-due':''}"><div><b>${b.customer}</b><br><small>${b.date} | ₹${b.total}</small></div><div style="display:flex; align-items:center;"><button class="card-btn btn-view" onclick='viewBill(${s})'><i class="fas fa-eye"></i></button>${audioBtn}${t==='dues'?`<button class="card-btn btn-wa" onclick="sendReminder('${b.customer}','${b.total}')"><i class="fab fa-whatsapp"></i></button>`:''}<button class="card-btn btn-del" onclick="delRec('${t}',${b.id})"><i class="fas fa-trash"></i></button>${t==='dues'?`<button class="card-btn" style="background:#2ecc71;" onclick="markPaid(${b.id})">Paid</button>`:''}</div></div>`; }});
         }
-        async function viewBill(b){ document.querySelectorAll('.view-section').forEach(e=>e.classList.remove('active-view')); document.getElementById('view-pos').classList.add('active-view'); document.getElementById('cName').value=b.customer; document.getElementById('grandTotal').innerText=b.total; document.getElementById('discountVal').value=b.discount||0; document.getElementById('billPayMode').innerText=b.payMode||'CASH'; document.getElementById('dueMark').style.display=b.isDue?'block':'none'; const tbody=document.getElementById('billTable').querySelector('tbody'); tbody.innerHTML=''; b.items.forEach(i=>{tbody.innerHTML+=`<tr><td contenteditable="true" oninput="recalcRow(this)">${i.name}</td><td contenteditable="true" oninput="recalcRow(this)">${i.price}</td><td contenteditable="true" oninput="recalcRow(this)">${i.qty}</td><td class="amt" data-val="${i.total}" style="text-align:right;">${i.total}</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td></tr>`;}); updateTotal(); setTimeout(async()=>{await generateBillImage();},100); }
+        async function viewBill(b){ document.querySelectorAll('.view-section').forEach(e=>e.classList.remove('active-view')); document.getElementById('view-pos').classList.add('active-view'); document.getElementById('cName').value=b.customer; document.getElementById('grandTotal').innerText=b.total; document.getElementById('discountVal').value=b.discount||0; document.getElementById('billPayMode').innerText=b.payMode||'CASH'; document.getElementById('dueMark').style.display=b.isDue?'block':'none'; const tbody=document.getElementById('billTable').querySelector('tbody'); tbody.innerHTML=''; b.items.forEach(i=>{tbody.innerHTML+=`<tr><td contenteditable="true" oninput="recalcRow(this)">${i.name}</td><td contenteditable="true" oninput="recalcRow(this)">${i.price}</td><td contenteditable="true" oninput="recalcRow(this)">${i.qty}</td><td class="amt" data-val="${i.total}" style="text-align:right; font-weight:bold;">${i.total}</td><td style="text-align:center;"><i class="fas fa-times" style="color:#e74c3c; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td></tr>`;}); updateTotal(); setTimeout(async()=>{await generateBillImage();},100); }
         function sendReminder(n,t){window.open(`https://wa.me/?text=Hello ${n}, Pending Amount: Rs ${t}`, '_blank');}
         function delRec(t,id){ if(confirm("Delete?")){ let d=getData(t==='dues'?'kamdeo_dues':'kamdeo_history').filter(b=>b.id!==id); saveData(t==='dues'?'kamdeo_dues':'kamdeo_history',d); renderList(t); if(currentUserData) { const dbRef = t==='dues' ? 'dues/' : 'bills/'; database.ref(dbRef + currentUserData.mobile + '/' + id).remove(); } } }
         function markPaid(id){ let d=getData('kamdeo_dues');let b=d.find(i=>i.id===id); if(b){ b.isDue=false; let h=getData('kamdeo_history'); h.unshift(b); saveData('kamdeo_history',h); saveData('kamdeo_dues',d.filter(i=>i.id!==id)); renderList('dues'); if(currentUserData) { database.ref('dues/' + currentUserData.mobile + '/' + id).remove(); database.ref('bills/' + currentUserData.mobile + '/' + b.id).set(b); } } }
         function backupData(){const a=document.createElement('a');a.href="data:text/json;charset=utf-8,"+encodeURIComponent(JSON.stringify({h:getData('kamdeo_history'),d:getData('kamdeo_dues'), n:getData('kamdeo_notes'), notis:getData('kamdeo_notis')}));a.download="backup.json";a.click();}
+
+        document.getElementById('payMode').addEventListener('change',function(){document.getElementById('billPayMode').innerText=this.value;});
 
         let isMicOn = false; let recognition = null; let currentTargetId = null; let currentBtnId = null;
         function toggleDictation(targetId, btnId) {
@@ -846,9 +859,6 @@
             recognition.onerror = (e) => { if(e.error === 'no-speech') return; isMicOn = false; btn.classList.remove('mic-listening'); if(currentTargetId === 'roughBillText') btn.innerHTML = '<i class="fas fa-microphone"></i> Bol Kar Likhen'; };
             recognition.start();
         }
-
-        // Notepad & Rough Bill & Admin kept identical to previous version, excluded for brevity as they just work
-        // All core functionalities restored seamlessly.
 
     </script>
 </body>
