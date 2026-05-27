@@ -123,7 +123,14 @@
         .chat-ai { background: #ecf0f1; color: #2c3e50; float: left; border-bottom-left-radius: 0; }
         .chat-user { background: #2980b9; color: white; float: right; border-bottom-right-radius: 0; }
 
-        @media print { .app-header, .input-dock, .action-bar, .sidebar, .search-box, .card-btn, #imgPreviewModal, .refresh-btn { display: none !important; } body, .main-container, .view-section, .scroll-area { height: auto; overflow: visible; display: block; margin: 0; padding: 0; } #view-pos { display: block; } .paper-bill { box-shadow: none; margin: 0; width: 100%; max-width: 58mm; border: none; padding: 0; } }
+        /* STRICT PRINT CSS FIXED */
+        @media print { 
+            body * { visibility: hidden !important; } 
+            #billPaper, #billPaper * { visibility: visible !important; } 
+            #billPaper { position: absolute; left: 0; top: 0; margin: 0; padding: 0; width: 100%; max-width: 100%; box-shadow: none; border: none; } 
+            /* Hide any random modals securely */
+            .modal-overlay, #voiceModal, #imgPreviewModal, #scannerModal, #notiModal, #aiChatModal, #aiProcessModal, #editProfileModal, #adminBillsModal, #adminOverlay, #authOverlay { display: none !important; }
+        }
     </style>
 </head>
 <body>
@@ -160,7 +167,7 @@
                     <img id="previewPicReg" src="" style="width:40px; height:40px; border-radius:50%; display:none; object-fit:cover;">
                 </div>
                 <input type="text" id="regName" class="auth-input" placeholder="Your Name">
-                <input type="number" id="regMobile" class="auth-input" placeholder="Mobile Number">
+                <input type="number" id="regMobile" class="auth-input" placeholder="Mobile Number (10 Digits)">
                 <input type="password" id="regPass" class="auth-input" placeholder="Create 6-Digit Password" maxlength="6">
                 <input type="text" id="regShopName" class="auth-input" placeholder="Shop Name">
                 <input type="text" id="regShopAddress" class="auth-input" placeholder="Shop Address">
@@ -483,7 +490,6 @@
             }
         };
 
-        // Load Global Products
         database.ref('products').on('value', (snapshot) => {
             globalProducts = snapshot.val() || {};
             localStorage.setItem('kamdeo_products', JSON.stringify(globalProducts));
@@ -512,9 +518,8 @@
         }
         function showForgotPass() { switchAuthTab('forgot'); }
 
-        // --- AUTH: SIMPLE PASSWORD LOGIC ---
         function loginUser() {
-            const mobile = document.getElementById('logMobile').value; 
+            const mobile = document.getElementById('logMobile').value.trim(); 
             const pass = document.getElementById('logPass').value;
             if(!mobile || !pass) { alert("Enter Mobile and Password to login!"); return; }
 
@@ -532,10 +537,9 @@
             });
         }
 
-        // --- AUTH: FORGOT PASSWORD ---
         let tempForgotUser = null;
         function fetchSecurityQuestion() {
-            const mobile = document.getElementById('fgtMobile').value;
+            const mobile = document.getElementById('fgtMobile').value.trim();
             if(!mobile) { alert("Enter Registered Mobile Number!"); return; }
             database.ref('users/' + mobile).once('value', (snapshot) => {
                 if(snapshot.exists()) {
@@ -551,7 +555,7 @@
             });
         }
         function resetPassword() {
-            const ans = document.getElementById('fgtAnswer').value.toLowerCase(); const newPass = document.getElementById('fgtNewPass').value;
+            const ans = document.getElementById('fgtAnswer').value.toLowerCase().trim(); const newPass = document.getElementById('fgtNewPass').value;
             if(newPass.length !== 6) { alert("Password must be exactly 6 characters/numbers!"); return; }
             if(!ans || !newPass) { alert("Fill security answer and new password!"); return; }
             if(ans === tempForgotUser.answer) {
@@ -562,12 +566,18 @@
         }
 
         function registerUser() {
-            const name = document.getElementById('regName').value; const mobile = document.getElementById('regMobile').value; const pass = document.getElementById('regPass').value;
-            const q = document.getElementById('regQuestion').value; const ans = document.getElementById('regAnswer').value;
-            const sName = document.getElementById('regShopName').value; const sAdd = document.getElementById('regShopAddress').value; 
+            const name = document.getElementById('regName').value.trim(); 
+            const mobile = document.getElementById('regMobile').value.trim(); 
+            const pass = document.getElementById('regPass').value;
+            const q = document.getElementById('regQuestion').value; 
+            const ans = document.getElementById('regAnswer').value.trim();
+            const sName = document.getElementById('regShopName').value.trim(); 
+            const sAdd = document.getElementById('regShopAddress').value.trim(); 
             
-            if(pass.length !== 6) { alert("Password must be exactly 6 characters"); return; }
-            if(!name || !mobile || !ans || !sName || !sAdd) { alert("Please fill all details correctly!"); return; }
+            // STRICT VALIDATION
+            if(mobile.length !== 10 || isNaN(mobile)) { alert("Mobile Number bilkul 10 ankon (digits) ka hona chahiye!"); return; }
+            if(pass.length !== 6) { alert("Password theek 6 characters ka hona chahiye!"); return; }
+            if(name.length < 2 || sName.length < 2 || sAdd.length < 2 || !ans) { alert("Kripya sabhi details sahi se bharein (Kam se kam 2 akshar ho)!"); return; }
 
             database.ref('users/' + mobile).once('value', (snapshot) => {
                 if(snapshot.exists()) { alert("User with this mobile already exists! Please Login."); } 
@@ -582,6 +592,58 @@
             });
         }
 
+        // ADMIN LOGIN NEW PASSWORD FIX
+        function loginPremium() {
+            const pass = document.getElementById('premPass').value;
+            if(pass === "ACS.adarsh@24361") { document.getElementById('adminOverlay').style.display = 'flex'; loadAdminUsers(); } 
+            else { alert("Wrong Premium Passcode!"); }
+        }
+
+        function closeAdmin() { document.getElementById('adminOverlay').style.display = 'none'; document.getElementById('premPass').value = ''; }
+        
+        let allUsersData = {};
+        function loadAdminUsers() {
+            database.ref('users').on('value', (snapshot) => {
+                allUsersData = snapshot.val() || {}; renderAdminUsers();
+            });
+        }
+        function renderAdminUsers() {
+            const search = document.getElementById('adminSearch').value.toLowerCase(); const list = document.getElementById('adminUserList'); list.innerHTML = '';
+            Object.keys(allUsersData).forEach(mobile => {
+                const u = allUsersData[mobile];
+                if(u.name.toLowerCase().includes(search) || u.mobile.includes(search) || u.shopName.toLowerCase().includes(search)) {
+                    list.innerHTML += `<div style="background:white; padding:15px; border-radius:8px; box-shadow:0 2px 5px rgba(0,0,0,0.1); border-left:5px solid #8e44ad;">
+                        <div style="font-weight:bold; font-size:16px; color:#2c3e50; display:flex; align-items:center; gap:10px;">
+                            <img src="${u.profilePic || 'https://cdn-icons-png.flaticon.com/512/3135/3135715.png'}" style="width:30px; height:30px; border-radius:50%;"> ${u.name} (${u.mobile})
+                        </div>
+                        <div style="font-size:13px; color:#34495e; margin-top:5px;"><b>Shop:</b> ${u.shopName} | <b>Add:</b> ${u.shopAddress}</div>
+                        <div style="font-size:12px; color:#c0392b; margin-top:5px; background:#fadbd8; padding:5px; border-radius:4px;"><b>Pass:</b> ${u.pass} | <b>Sec. Ans:</b> ${u.answer}</div>
+                        <div style="margin-top:10px; display:flex; gap:10px;">
+                            <button class="auth-btn" style="padding:5px 10px; font-size:12px; flex:1;" onclick="adminViewUserBills('${mobile}')"><i class="fas fa-eye"></i> View All Bills</button>
+                            <button class="auth-btn auth-btn-alt" style="padding:5px 10px; font-size:12px;" onclick="deleteUser('${mobile}')"><i class="fas fa-trash"></i></button>
+                        </div>
+                    </div>`;
+                }
+            });
+        }
+        function deleteUser(mobile) { if(confirm("Permanently delete this user from database?")) { database.ref('users/' + mobile).remove(); alert("User deleted!"); } }
+        
+        function adminViewUserBills(mobile) {
+            const cont = document.getElementById('adminBillsContainer'); cont.innerHTML = 'Loading...';
+            document.getElementById('adminBillsModal').style.display = 'flex';
+            database.ref('bills/' + mobile).once('value', snap => {
+                cont.innerHTML = '';
+                if(!snap.exists()) { cont.innerHTML = '<p style="text-align:center;">No bills found for this user.</p>'; return; }
+                let bills = []; snap.forEach(child => bills.unshift(child.val()));
+                bills.forEach(b => {
+                    cont.innerHTML += `<div style="background:white; padding:10px; margin-bottom:10px; border-radius:5px; border-left:4px solid #2980b9;">
+                        <b>${b.customer}</b> <br><small>${b.date} | ₹${b.total} | via ${b.payMode}</small>
+                    </div>`;
+                });
+            });
+        }
+
+
         function logoutUser() {
             currentUserData = null;
             localStorage.removeItem('acs_loggedInUser');
@@ -591,7 +653,6 @@
             location.reload(); 
         }
 
-        // DYNAMIC POS UPDATE
         function applyUserDataToPOS() {
             if(!currentUserData) return;
             document.getElementById('sidebarUserName').innerText = currentUserData.name.toUpperCase();
@@ -605,15 +666,11 @@
             document.getElementById('stampName').innerText = currentUserData.shopName.substring(0,8).toUpperCase();
         }
 
-        // --- NEW FEATURE 1: AI CAMERA BILL (IMPROVED SIMULATION) ---
         function processAIBillPicture(input) {
             toggleMenu();
             if (input.files && input.files[0]) {
                 const modal = document.getElementById('aiProcessModal');
                 modal.style.display = 'flex';
-                
-                // Advanced AI Note for Developer
-                console.log("Image received. Note: To read real text, connect this Blob to Gemini API Vision backend.");
                 
                 setTimeout(() => {
                     modal.style.display = 'none';
@@ -622,9 +679,7 @@
                     document.getElementById('cName').value = "AI Walk-in Customer";
                     const tbody = document.getElementById('billTable').querySelector('tbody');
                     
-                    // Simulating reading a handwritten bill
                     tbody.innerHTML += `<tr><td contenteditable="true" oninput="recalcRow(this)">Scanned Rice</td><td contenteditable="true" oninput="recalcRow(this)">50</td><td contenteditable="true" oninput="recalcRow(this)">5 Kg</td><td class="amt" data-val="250" style="text-align:right;">250.00</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td></tr>`;
-                    
                     tbody.innerHTML += `<tr><td contenteditable="true" oninput="recalcRow(this)">Scanned Oil</td><td contenteditable="true" oninput="recalcRow(this)">120</td><td contenteditable="true" oninput="recalcRow(this)">2 Ltr</td><td class="amt" data-val="240" style="text-align:right;">240.00</td><td style="text-align:center;"><i class="fas fa-times" style="color:red; cursor:pointer;" onclick="this.closest('tr').remove();updateTotal();"></i></td></tr>`;
                     
                     updateTotal();
@@ -634,7 +689,6 @@
             }
         }
 
-        // --- NEW FEATURE 2: AI HELP CENTER TO WHATSAPP ---
         function openHelpCenter() {
             toggleMenu(); 
             document.getElementById('aiChatModal').style.display = 'flex';
@@ -675,7 +729,6 @@
             }, 1000);
         }
 
-        // --- FIXED: EDIT PROFILE MODAL LOGIC ---
         let tempEditPicBase64 = "";
         function openEditProfile() {
             if(!currentUserData) return;
@@ -696,9 +749,9 @@
         }
         function saveEditedProfile() {
             if(!currentUserData) return;
-            currentUserData.name = document.getElementById('editName').value;
-            currentUserData.shopName = document.getElementById('editShopName').value;
-            currentUserData.shopAddress = document.getElementById('editShopAddress').value;
+            currentUserData.name = document.getElementById('editName').value.trim();
+            currentUserData.shopName = document.getElementById('editShopName').value.trim();
+            currentUserData.shopAddress = document.getElementById('editShopAddress').value.trim();
             if(tempEditPicBase64) { currentUserData.profilePic = tempEditPicBase64; }
             
             database.ref('users/' + currentUserData.mobile).set(currentUserData)
@@ -708,12 +761,11 @@
                 document.getElementById('editProfileModal').style.display = 'none';
                 alert("Profile Updated Successfully!");
             }).catch((err) => {
-                alert("Failed to update profile. Make sure Firebase Rules allow writing! Error: " + err.message);
+                alert("Failed to update profile. Error: " + err.message);
             });
         }
 
 
-        // CLOUD SYNC FOR BILLS AND DUES
         function syncDataFromCloud() {
             if(!currentUserData) return;
             database.ref('bills/' + currentUserData.mobile).on('value', snap => {
@@ -728,7 +780,6 @@
             });
         }
 
-        // POS CORE LOGIC UPDATE (WITH UNIT SELECTOR & EXCEL STYLE)
         function addItem(){
             const n=document.getElementById('iName').value; 
             const p=parseFloat(document.getElementById('iPrice').value); 
@@ -749,7 +800,6 @@
         function updateTotal(){ let sum=0; document.querySelectorAll('.amt').forEach(t=>sum+=parseFloat(t.getAttribute('data-val'))); document.getElementById('subTotal').innerText=sum.toFixed(2); document.getElementById('grandTotal').innerText=(sum-(parseFloat(document.getElementById('discountVal').value)||0)).toFixed(2); }
         function resetPOS() { document.getElementById('cName').value=""; document.getElementById('iName').value=""; document.getElementById('iPrice').value=""; document.getElementById('iQty').value="1"; document.getElementById('discountVal').value=""; document.getElementById('billTable').querySelector('tbody').innerHTML=""; document.getElementById('subTotal').innerText="0.00"; document.getElementById('grandTotal').innerText="0.00"; document.getElementById('dueMark').style.display='none'; }
 
-        // --- GLOBAL CLOUD PRODUCT SCANNER (WITH UNIT) ---
         let scanner;
         function startScanner(m){
             document.getElementById('scannerModal').style.display='flex';
@@ -760,7 +810,7 @@
                     if(db[c]){
                         document.getElementById('iName').value=db[c].name;
                         document.getElementById('iPrice').value=db[c].price;
-                        if(db[c].unit) document.getElementById('iUnit').value = db[c].unit; // Auto select unit
+                        if(db[c].unit) document.getElementById('iUnit').value = db[c].unit; 
                     } else{alert("Not Listed in Global Database");} 
                 } else if(m==='product_add'){ 
                     if(db[c]){alert("⚠️ ALREADY LISTED GLOBALLY!\nName: "+db[c].name+"\nPrice: ₹"+db[c].price);}
@@ -808,6 +858,7 @@
         function skipVoiceRecord() { if(mediaRecorder && mediaRecorder.state === "recording") { mediaRecorder.stop(); mediaRecorder.stream.getTracks().forEach(t=>t.stop()); } finalizeDue(null); }
         function finalizeDue(audioBase64) { document.getElementById('voiceModal').style.display = 'none'; document.getElementById('dueMark').style.display='block'; saveRec(true, audioBase64); playSound('bill'); alert("Added to Due!"); setTimeout(resetPOS, 500); }
 
+        // HISTORY SAVE FUNCTION
         function saveRec(isDue, audioBase64 = null) {
             const c=document.getElementById('cName').value||"Unknown"; const t=document.getElementById('grandTotal').innerText; const d=document.getElementById('discountVal').value; const pm=document.getElementById('payMode').value;
             let items=[]; document.querySelectorAll('#billTable tbody tr').forEach(r=>{items.push({name:r.cells[0].innerText,price:r.cells[1].innerText,qty:r.cells[2].innerText,total:r.cells[3].innerText});});
@@ -815,6 +866,10 @@
             const rec={id:Date.now(),date:new Date().toLocaleString(),customer:c,total:t,discount:d,payMode:pm,items:items,isDue:isDue, audio:audioBase64}; 
             const k=isDue?'kamdeo_dues':'kamdeo_history'; let data=getData(k); data.unshift(rec); saveData(k,data); 
             if(currentUserData) { const dbRef = isDue ? 'dues/' : 'bills/'; database.ref(dbRef + currentUserData.mobile + '/' + rec.id).set(rec); }
+            
+            // HISTORY LIST RENDER AFTER SAVE
+            renderList('history');
+            
             return true;
         }
 
